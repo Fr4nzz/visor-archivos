@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
 
   // For GitHub Pages - set to repo name
-  base: '/Dropbox_inv/',
+  base: '/visor-archivos/',
 
   resolve: {
     alias: {
