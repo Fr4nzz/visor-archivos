@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowUpDown, ArrowUp, ArrowDown, Filter, X, Search, Download } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -46,7 +46,58 @@ export function DataTableView() {
     new Set(COLUMNS.filter(c => !c.metadata).map(c => c.key))
   );
 
+  // Column widths state (for resizing)
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    const widths: Record<string, number> = {};
+    COLUMNS.forEach(col => {
+      widths[col.key] = col.width;
+    });
+    return widths;
+  });
+
+  // Resizing state
+  const [resizing, setResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null);
+
   const parentRef = useRef<HTMLDivElement>(null);
+
+  // Handle column resize start
+  const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizing({
+      column: columnKey,
+      startX: e.clientX,
+      startWidth: columnWidths[columnKey],
+    });
+  }, [columnWidths]);
+
+  // Handle mouse move during resize
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!resizing) return;
+    const delta = e.clientX - resizing.startX;
+    const newWidth = Math.max(50, resizing.startWidth + delta);
+    setColumnWidths(prev => ({
+      ...prev,
+      [resizing.column]: newWidth,
+    }));
+  }, [resizing]);
+
+  // Handle mouse up to end resize
+  const handleResizeEnd = useCallback(() => {
+    setResizing(null);
+  }, []);
+
+  // Add/remove event listeners for resizing
+  useEffect(() => {
+    if (resizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [resizing, handleResizeMove, handleResizeEnd]);
 
   // Get cell value helper
   const getCellValue = useCallback((entry: InventoryEntry, column: string): string | number | null => {
@@ -203,7 +254,7 @@ export function DataTableView() {
   };
 
   const visibleCols = COLUMNS.filter(c => visibleColumns.has(c.key));
-  const totalWidth = visibleCols.reduce((sum, c) => sum + c.width, 0);
+  const totalWidth = visibleCols.reduce((sum, c) => sum + columnWidths[c.key], 0);
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -308,11 +359,11 @@ export function DataTableView() {
               return (
                 <div
                   key={col.key}
-                  className="flex-none border-r border-gray-200 last:border-r-0"
-                  style={{ width: col.width }}
+                  className="flex-none relative group"
+                  style={{ width: columnWidths[col.key] }}
                 >
                   <div
-                    className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-100"
+                    className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-100 border-r border-gray-200"
                     onClick={() => handleSort(col.key)}
                   >
                     <span className="text-xs font-semibold text-gray-700 truncate">
@@ -342,6 +393,15 @@ export function DataTableView() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Resize handle */}
+                  <div
+                    className={clsx(
+                      'absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors',
+                      resizing?.column === col.key ? 'bg-blue-500' : 'bg-transparent group-hover:bg-blue-300'
+                    )}
+                    onMouseDown={(e) => handleResizeStart(e, col.key)}
+                  />
 
                   {/* Filter dropdown */}
                   {activeFilterColumn === col.key && (
@@ -406,7 +466,7 @@ export function DataTableView() {
                       <div
                         key={col.key}
                         className="flex-none px-3 py-2 text-xs text-gray-700 truncate border-r border-gray-100 last:border-r-0"
-                        style={{ width: col.width }}
+                        style={{ width: columnWidths[col.key] }}
                         title={displayValue}
                       >
                         {displayValue}
