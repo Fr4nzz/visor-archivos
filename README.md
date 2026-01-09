@@ -14,13 +14,13 @@ Aplicación web para visualizar inventarios de archivos grandes. Diseñada para 
 
 ## Demo
 
-La aplicación está disponible en: https://fr4nzz.github.io/Dropbox_inv/
+La aplicación está disponible en: https://fr4nzz.github.io/visor-archivos/
 
 ## Uso
 
 ### Opción 1: Usar la aplicación web
 
-1. Visita la [demo](https://fr4nzz.github.io/Dropbox_inv/)
+1. Visita la [demo](https://fr4nzz.github.io/visor-archivos/)
 2. Arrastra tu archivo CSV de inventario o haz clic para seleccionarlo
 3. Verifica el mapeo de columnas y haz clic en "Continue"
 4. Explora tu inventario usando las pestañas: Navigator, Treemap, Stats, Search
@@ -29,8 +29,8 @@ La aplicación está disponible en: https://fr4nzz.github.io/Dropbox_inv/
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/Fr4nzz/Dropbox_inv.git
-cd Dropbox_inv
+git clone https://github.com/Fr4nzz/visor-archivos.git
+cd visor-archivos
 
 # Instalar dependencias
 npm install
