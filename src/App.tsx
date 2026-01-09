@@ -8,6 +8,7 @@ import { FolderTree } from './components/navigator/FolderTree';
 import { TreemapView } from './components/treemap/TreemapView';
 import { StatsDashboard } from './components/stats/StatsDashboard';
 import { SearchView } from './components/search/SearchView';
+import { DataTableView } from './components/data/DataTableView';
 import { useInventoryStore } from './stores/inventoryStore';
 import { useUIStore } from './stores/uiStore';
 import type { ColumnMapping } from './types/inventory';
@@ -125,6 +126,8 @@ function App() {
             return <StatsDashboard />;
           case 'search':
             return <SearchView />;
+          case 'data':
+            return <DataTableView />;
           default:
             return <FolderTree />;
         }

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { type Language } from '../utils/translations';
 
-export type TabId = 'navigator' | 'treemap' | 'stats' | 'search';
+export type TabId = 'navigator' | 'treemap' | 'stats' | 'search' | 'data';
 export type TreemapColorBy = 'extension' | 'category' | 'depth' | 'species' | 'project';
 
 interface UIState {

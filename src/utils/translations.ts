@@ -14,6 +14,7 @@ export const translations = {
     treemap: 'Treemap',
     statistics: 'Statistics',
     search: 'Search',
+    dataTable: 'Data',
 
     // Stats Dashboard
     totalFiles: 'Total Files',
@@ -101,6 +102,7 @@ export const translations = {
     treemap: 'Mapa de Árbol',
     statistics: 'Estadísticas',
     search: 'Búsqueda',
+    dataTable: 'Datos',
 
     // Stats Dashboard
     totalFiles: 'Total de Archivos',
