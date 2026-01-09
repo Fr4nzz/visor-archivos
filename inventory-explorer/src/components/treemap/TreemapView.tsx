@@ -159,9 +159,9 @@ export function TreemapView() {
       .attr('stroke', '#fff')
       .attr('stroke-width', 1)
       .attr('rx', 2)
-      .style('cursor', (d) => (d.data.type === 'folder' && d.children ? 'pointer' : 'default'))
+      .style('cursor', (d) => (d.data.type === 'folder' ? 'pointer' : 'default'))
       .on('click', (_event, d) => {
-        if (d.data.type === 'folder' && d.children) {
+        if (d.data.type === 'folder') {
           setTreemapCurrentPath(d.data.path);
         }
       })
