@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { type Language } from '../utils/translations';
 
 export type TabId = 'navigator' | 'treemap' | 'stats' | 'search';
+export type TreemapColorBy = 'extension' | 'category' | 'depth' | 'species' | 'project';
 
 interface UIState {
   // Language
@@ -13,8 +14,8 @@ interface UIState {
   setActiveTab: (tab: TabId) => void;
 
   // Treemap state
-  treemapColorBy: 'extension' | 'category' | 'depth';
-  setTreemapColorBy: (colorBy: 'extension' | 'category' | 'depth') => void;
+  treemapColorBy: TreemapColorBy;
+  setTreemapColorBy: (colorBy: TreemapColorBy) => void;
   treemapCurrentPath: string;
   setTreemapCurrentPath: (path: string) => void;
 

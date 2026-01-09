@@ -15,7 +15,7 @@ import {
 import { useInventoryStore } from '../../stores/inventoryStore';
 import { useUIStore } from '../../stores/uiStore';
 import { formatSize, formatNumber } from '../../utils/formatters';
-import { getColorByExtension } from '../../utils/colorSchemes';
+import { getColorByExtension, getColorBySpecies, getColorByProject } from '../../utils/colorSchemes';
 import { translations } from '../../utils/translations';
 
 type PieChartMode = 'size' | 'count';
@@ -251,6 +251,197 @@ export function StatsDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Metadata Statistics - Only shown if metadata exists */}
+      {stats.metadataStats?.hasMetadata && (
+        <>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">
+            {language === 'es' ? 'Estadísticas de Metadatos' : 'Metadata Statistics'}
+          </h2>
+
+          <div className="grid grid-cols-2 gap-6 mb-6">
+            {/* Species Distribution */}
+            {Object.keys(stats.metadataStats.species).length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  {language === 'es' ? 'Distribución por Especie' : 'Distribution by Species'}
+                </h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={Object.entries(stats.metadataStats.species)
+                          .sort(([, a], [, b]) => b.size - a.size)
+                          .slice(0, 10)
+                          .map(([name, data]) => ({
+                            name,
+                            value: data.size,
+                            count: data.count,
+                            color: getColorBySpecies(name),
+                          }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ name, percent }) =>
+                          percent && percent > 0.05 ? `${name || ''} (${(percent * 100).toFixed(0)}%)` : ''
+                        }
+                      >
+                        {Object.entries(stats.metadataStats.species)
+                          .sort(([, a], [, b]) => b.size - a.size)
+                          .slice(0, 10)
+                          .map(([name], index) => (
+                            <Cell key={`cell-${index}`} fill={getColorBySpecies(name)} />
+                          ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value, name, props) => [
+                          `${formatSize(Number(value))} (${props.payload.count} ${t.files})`,
+                          name
+                        ]}
+                      />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Project Distribution */}
+            {Object.keys(stats.metadataStats.projects).length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  {language === 'es' ? 'Distribución por Proyecto' : 'Distribution by Project'}
+                </h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={Object.entries(stats.metadataStats.projects)
+                          .sort(([, a], [, b]) => b.size - a.size)
+                          .slice(0, 10)
+                          .map(([name, data]) => ({
+                            name,
+                            value: data.size,
+                            count: data.count,
+                            color: getColorByProject(name),
+                          }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ name, percent }) =>
+                          percent && percent > 0.05 ? `${name || ''} (${(percent * 100).toFixed(0)}%)` : ''
+                        }
+                      >
+                        {Object.entries(stats.metadataStats.projects)
+                          .sort(([, a], [, b]) => b.size - a.size)
+                          .slice(0, 10)
+                          .map(([name], index) => (
+                            <Cell key={`cell-${index}`} fill={getColorByProject(name)} />
+                          ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value, name, props) => [
+                          `${formatSize(Number(value))} (${props.payload.count} ${t.files})`,
+                          name
+                        ]}
+                      />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Species Table */}
+          {Object.keys(stats.metadataStats.species).length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                {language === 'es' ? 'Todas las Especies' : 'All Species'}
+              </h3>
+              <div className="overflow-x-auto max-h-64">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">
+                        {language === 'es' ? 'Especie' : 'Species'}
+                      </th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">{t.count}</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">{t.totalSize}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {Object.entries(stats.metadataStats.species)
+                      .sort(([, a], [, b]) => b.size - a.size)
+                      .map(([species, data]) => (
+                        <tr key={species} className="hover:bg-gray-50">
+                          <td className="px-4 py-2">
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                              style={{
+                                backgroundColor: `${getColorBySpecies(species)}20`,
+                                color: getColorBySpecies(species),
+                              }}
+                            >
+                              {species}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-right text-gray-900">{formatNumber(data.count)}</td>
+                          <td className="px-4 py-2 text-right text-gray-900">{formatSize(data.size)}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Projects Table */}
+          {Object.keys(stats.metadataStats.projects).length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                {language === 'es' ? 'Todos los Proyectos' : 'All Projects'}
+              </h3>
+              <div className="overflow-x-auto max-h-64">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">
+                        {language === 'es' ? 'Proyecto' : 'Project'}
+                      </th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">{t.count}</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">{t.totalSize}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {Object.entries(stats.metadataStats.projects)
+                      .sort(([, a], [, b]) => b.size - a.size)
+                      .map(([project, data]) => (
+                        <tr key={project} className="hover:bg-gray-50">
+                          <td className="px-4 py-2">
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                              style={{
+                                backgroundColor: `${getColorByProject(project)}20`,
+                                color: getColorByProject(project),
+                              }}
+                            >
+                              {project}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-right text-gray-900">{formatNumber(data.count)}</td>
+                          <td className="px-4 py-2 text-right text-gray-900">{formatSize(data.size)}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Extension breakdown table */}
       <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">

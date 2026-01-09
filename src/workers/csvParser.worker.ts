@@ -5,6 +5,8 @@ import type {
   FolderNode,
   InventoryStats,
   SizeDistributionBucket,
+  EntryMetadata,
+  MetadataStats,
 } from '../types/inventory';
 
 // Utility functions (duplicated to avoid import issues in worker)
@@ -120,6 +122,67 @@ function mapRowToEntry(
   const typeRaw = row[mapping.type]?.toLowerCase() || 'file';
   const type = typeRaw === 'folder' || typeRaw === 'directory' ? 'folder' : 'file';
 
+  // Extract metadata if columns are mapped
+  const metadata: EntryMetadata = {};
+  let hasMetadata = false;
+
+  if (mapping.extracted_date && row[mapping.extracted_date]) {
+    metadata.extracted_date = row[mapping.extracted_date];
+    hasMetadata = true;
+  }
+  if (mapping.date_precision && row[mapping.date_precision]) {
+    metadata.date_precision = row[mapping.date_precision];
+    hasMetadata = true;
+  }
+  if (mapping.species && row[mapping.species]) {
+    metadata.species = row[mapping.species];
+    hasMetadata = true;
+  }
+  if (mapping.equipment && row[mapping.equipment]) {
+    metadata.equipment = row[mapping.equipment];
+    hasMetadata = true;
+  }
+  if (mapping.location && row[mapping.location]) {
+    metadata.location = row[mapping.location];
+    hasMetadata = true;
+  }
+  if (mapping.zone && row[mapping.zone]) {
+    metadata.zone = row[mapping.zone];
+    hasMetadata = true;
+  }
+  if (mapping.project && row[mapping.project]) {
+    metadata.project = row[mapping.project];
+    hasMetadata = true;
+  }
+  if (mapping.data_type && row[mapping.data_type]) {
+    metadata.data_type = row[mapping.data_type];
+    hasMetadata = true;
+  }
+  if (mapping.climate_variable && row[mapping.climate_variable]) {
+    metadata.climate_variable = row[mapping.climate_variable];
+    hasMetadata = true;
+  }
+  if (mapping.climate_extent && row[mapping.climate_extent]) {
+    metadata.climate_extent = row[mapping.climate_extent];
+    hasMetadata = true;
+  }
+  if (mapping.camera_id && row[mapping.camera_id]) {
+    metadata.camera_id = row[mapping.camera_id];
+    hasMetadata = true;
+  }
+  if (mapping.sequence_number && row[mapping.sequence_number]) {
+    metadata.sequence_number = row[mapping.sequence_number];
+    hasMetadata = true;
+  }
+  if (mapping.deforestation_period && row[mapping.deforestation_period]) {
+    metadata.deforestation_period = row[mapping.deforestation_period];
+    hasMetadata = true;
+  }
+  if (mapping.is_system_file && row[mapping.is_system_file]) {
+    metadata.is_system_file = row[mapping.is_system_file]?.toLowerCase() === 'true';
+    hasMetadata = true;
+  }
+
   return {
     id: `${index}-${normalizedPath.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 50)}`,
     path: normalizedPath,
@@ -137,6 +200,7 @@ function mapRowToEntry(
       : getParentPath(normalizedPath),
     depth: mapping.depth ? parseInt(row[mapping.depth]) || getDepth(normalizedPath) : getDepth(normalizedPath),
     hash: mapping.hash ? row[mapping.hash] : undefined,
+    metadata: hasMetadata ? metadata : undefined,
   };
 }
 
@@ -209,6 +273,7 @@ function buildFolderTree(entries: InventoryEntry[]): FolderNode {
       extension: file.extension,
       modified: file.modified,
       depth: file.depth,
+      metadata: file.metadata,
     };
 
     parent.children.set(fileNode.name, fileNode);
@@ -380,6 +445,76 @@ function calculateStats(entries: InventoryEntry[], tree: FolderNode): InventoryS
     }
   }
 
+  // Calculate metadata statistics
+  const metadataStats: MetadataStats = {
+    species: {},
+    projects: {},
+    locations: {},
+    zones: {},
+    equipment: {},
+    dataTypes: {},
+    hasMetadata: false,
+  };
+
+  for (const entry of entries) {
+    if (!entry.metadata) continue;
+    metadataStats.hasMetadata = true;
+
+    if (entry.metadata.species) {
+      const key = entry.metadata.species;
+      if (!metadataStats.species[key]) {
+        metadataStats.species[key] = { count: 0, size: 0 };
+      }
+      metadataStats.species[key].count++;
+      metadataStats.species[key].size += entry.size;
+    }
+
+    if (entry.metadata.project) {
+      const key = entry.metadata.project;
+      if (!metadataStats.projects[key]) {
+        metadataStats.projects[key] = { count: 0, size: 0 };
+      }
+      metadataStats.projects[key].count++;
+      metadataStats.projects[key].size += entry.size;
+    }
+
+    if (entry.metadata.location) {
+      const key = entry.metadata.location;
+      if (!metadataStats.locations[key]) {
+        metadataStats.locations[key] = { count: 0, size: 0 };
+      }
+      metadataStats.locations[key].count++;
+      metadataStats.locations[key].size += entry.size;
+    }
+
+    if (entry.metadata.zone) {
+      const key = entry.metadata.zone;
+      if (!metadataStats.zones[key]) {
+        metadataStats.zones[key] = { count: 0, size: 0 };
+      }
+      metadataStats.zones[key].count++;
+      metadataStats.zones[key].size += entry.size;
+    }
+
+    if (entry.metadata.equipment) {
+      const key = entry.metadata.equipment;
+      if (!metadataStats.equipment[key]) {
+        metadataStats.equipment[key] = { count: 0, size: 0 };
+      }
+      metadataStats.equipment[key].count++;
+      metadataStats.equipment[key].size += entry.size;
+    }
+
+    if (entry.metadata.data_type) {
+      const key = entry.metadata.data_type;
+      if (!metadataStats.dataTypes[key]) {
+        metadataStats.dataTypes[key] = { count: 0, size: 0 };
+      }
+      metadataStats.dataTypes[key].count++;
+      metadataStats.dataTypes[key].size += entry.size;
+    }
+  }
+
   return {
     totalFiles: files.length,
     totalFolders: folders.length,
@@ -391,5 +526,6 @@ function calculateStats(entries: InventoryEntry[], tree: FolderNode): InventoryS
     largestFolders,
     filesByMonth: hasDateData ? filesByMonth : undefined,
     hasDateData,
+    metadataStats: metadataStats.hasMetadata ? metadataStats : undefined,
   };
 }

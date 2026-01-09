@@ -16,6 +16,10 @@ type FieldKey = keyof typeof COLUMN_ALIASES;
 
 const requiredFields: FieldKey[] = ['path', 'type', 'size'];
 const optionalFields: FieldKey[] = ['name', 'extension', 'modified', 'parent', 'depth', 'hash'];
+const metadataFields: FieldKey[] = [
+  'extracted_date', 'species', 'project', 'location', 'zone',
+  'equipment', 'data_type', 'camera_id'
+];
 
 function autoDetectColumn(headers: string[], field: FieldKey): string | null {
   const aliases = COLUMN_ALIASES[field];
@@ -54,6 +58,21 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
       parent: null,
       depth: null,
       hash: null,
+      // Metadata fields
+      extracted_date: null,
+      date_precision: null,
+      species: null,
+      equipment: null,
+      location: null,
+      zone: null,
+      project: null,
+      data_type: null,
+      climate_variable: null,
+      climate_extent: null,
+      camera_id: null,
+      sequence_number: null,
+      deforestation_period: null,
+      is_system_file: null,
     };
 
     // Use initial mapping if provided
@@ -65,7 +84,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
     }
 
     // Auto-detect columns
-    for (const field of [...requiredFields, ...optionalFields]) {
+    for (const field of [...requiredFields, ...optionalFields, ...metadataFields]) {
       initial[field] = autoDetectColumn(headers, field);
     }
 
@@ -76,7 +95,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
 
   useEffect(() => {
     const detected = new Set<FieldKey>();
-    for (const field of [...requiredFields, ...optionalFields]) {
+    for (const field of [...requiredFields, ...optionalFields, ...metadataFields]) {
       const auto = autoDetectColumn(headers, field);
       if (auto && mapping[field] === auto) {
         detected.add(field);
@@ -109,6 +128,21 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
       parent: mapping.parent || undefined,
       depth: mapping.depth || undefined,
       hash: mapping.hash || undefined,
+      // Metadata fields
+      extracted_date: mapping.extracted_date || undefined,
+      date_precision: mapping.date_precision || undefined,
+      species: mapping.species || undefined,
+      equipment: mapping.equipment || undefined,
+      location: mapping.location || undefined,
+      zone: mapping.zone || undefined,
+      project: mapping.project || undefined,
+      data_type: mapping.data_type || undefined,
+      climate_variable: mapping.climate_variable || undefined,
+      climate_extent: mapping.climate_extent || undefined,
+      camera_id: mapping.camera_id || undefined,
+      sequence_number: mapping.sequence_number || undefined,
+      deforestation_period: mapping.deforestation_period || undefined,
+      is_system_file: mapping.is_system_file || undefined,
     };
 
     onConfirm(columnMapping);
@@ -124,6 +158,21 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
     parent: t.parentFolder,
     depth: language === 'es' ? 'Profundidad de Carpeta' : 'Folder Depth',
     hash: language === 'es' ? 'Hash de Contenido' : 'Content Hash',
+    // Metadata fields
+    extracted_date: language === 'es' ? 'Fecha Extraída' : 'Extracted Date',
+    date_precision: language === 'es' ? 'Precisión de Fecha' : 'Date Precision',
+    species: language === 'es' ? 'Especie' : 'Species',
+    equipment: language === 'es' ? 'Equipo' : 'Equipment',
+    location: language === 'es' ? 'Ubicación' : 'Location',
+    zone: language === 'es' ? 'Zona' : 'Zone',
+    project: language === 'es' ? 'Proyecto' : 'Project',
+    data_type: language === 'es' ? 'Tipo de Datos' : 'Data Type',
+    climate_variable: language === 'es' ? 'Variable Climática' : 'Climate Variable',
+    climate_extent: language === 'es' ? 'Extensión Climática' : 'Climate Extent',
+    camera_id: language === 'es' ? 'ID de Cámara' : 'Camera ID',
+    sequence_number: language === 'es' ? 'Número de Secuencia' : 'Sequence Number',
+    deforestation_period: language === 'es' ? 'Período Deforestación' : 'Deforestation Period',
+    is_system_file: language === 'es' ? 'Archivo de Sistema' : 'System File',
   };
 
   const required = language === 'es' ? 'Requerido' : 'Required';
@@ -202,6 +251,40 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
             <h3 className="text-sm font-semibold text-gray-900 mb-3">{t.optionalMappings}</h3>
             <div className="space-y-3">
               {optionalFields.map((field) => (
+                <div key={field} className="flex items-center gap-4">
+                  <label className="w-32 text-sm font-medium text-gray-500">
+                    {fieldLabels[field]}
+                  </label>
+                  <select
+                    value={mapping[field] || ''}
+                    onChange={(e) => handleChange(field, e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">{notMappedText}</option>
+                    {headers.map((header) => (
+                      <option key={header} value={header}>
+                        {header}
+                      </option>
+                    ))}
+                  </select>
+                  {mapping[field] && autoDetected.has(field) && (
+                    <span className="flex items-center gap-1 text-xs text-green-600">
+                      <CheckCircle2 className="w-4 h-4" />
+                      {t.autoDetected}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Metadata fields */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              {language === 'es' ? 'Metadatos (Extraídos de nombres de archivo)' : 'Metadata (Extracted from filenames)'}
+            </h3>
+            <div className="space-y-3">
+              {metadataFields.map((field) => (
                 <div key={field} className="flex items-center gap-4">
                   <label className="w-32 text-sm font-medium text-gray-500">
                     {fieldLabels[field]}

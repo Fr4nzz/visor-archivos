@@ -15,20 +15,73 @@ export interface OptionalFields {
   hash?: string;           // Content hash for deduplication
 }
 
-export type ColumnMapping = RequiredFields & OptionalFields;
+// Metadata fields (extracted from filenames)
+export interface MetadataFields {
+  extracted_date?: string;
+  date_precision?: string;
+  species?: string;
+  equipment?: string;
+  location?: string;
+  zone?: string;
+  project?: string;
+  data_type?: string;
+  climate_variable?: string;
+  climate_extent?: string;
+  camera_id?: string;
+  sequence_number?: string;
+  deforestation_period?: string;
+  is_system_file?: string;
+}
+
+export type ColumnMapping = RequiredFields & OptionalFields & MetadataFields;
 
 // Common column name variations to auto-detect
 export const COLUMN_ALIASES: Record<keyof ColumnMapping, string[]> = {
+  // Required
   path: ['path', 'filepath', 'file_path', 'fullpath', 'full_path', 'location'],
   type: ['type', 'kind', 'item_type', 'entry_type', 'filetype'],
   size: ['size', 'size_bytes', 'bytes', 'filesize', 'file_size', 'length'],
+  // Optional
   name: ['name', 'filename', 'file_name', 'basename'],
   extension: ['extension', 'ext', 'file_ext', 'suffix'],
   modified: ['modified', 'date_modified', 'mtime', 'last_modified', 'updated'],
   parent: ['parent', 'parent_folder', 'directory', 'folder', 'dirname'],
   depth: ['depth', 'folder_depth', 'level'],
   hash: ['hash', 'content_hash', 'md5', 'sha1', 'sha256', 'checksum'],
+  // Metadata
+  extracted_date: ['extracted_date', 'date', 'fecha'],
+  date_precision: ['date_precision', 'precision'],
+  species: ['species', 'especie', 'scientific_name', 'nombre_cientifico'],
+  equipment: ['equipment', 'equipo', 'camera', 'recorder'],
+  location: ['location', 'ubicacion', 'site', 'sitio'],
+  zone: ['zone', 'zona', 'position'],
+  project: ['project', 'proyecto', 'study'],
+  data_type: ['data_type', 'tipo_dato', 'tipo'],
+  climate_variable: ['climate_variable', 'variable_climatica'],
+  climate_extent: ['climate_extent', 'extension_climatica'],
+  camera_id: ['camera_id', 'camara_id', 'trap_id'],
+  sequence_number: ['sequence_number', 'secuencia', 'seq'],
+  deforestation_period: ['deforestation_period', 'periodo_deforestacion'],
+  is_system_file: ['is_system_file', 'archivo_sistema', 'system'],
 };
+
+// Metadata stored on entries
+export interface EntryMetadata {
+  extracted_date?: string | null;
+  date_precision?: string | null;
+  species?: string | null;
+  equipment?: string | null;
+  location?: string | null;
+  zone?: string | null;
+  project?: string | null;
+  data_type?: string | null;
+  climate_variable?: string | null;
+  climate_extent?: string | null;
+  camera_id?: string | null;
+  sequence_number?: string | null;
+  deforestation_period?: string | null;
+  is_system_file?: boolean;
+}
 
 // Processed inventory entry
 export interface InventoryEntry {
@@ -42,7 +95,7 @@ export interface InventoryEntry {
   parent: string;
   depth: number;
   hash?: string;
-  extra?: Record<string, unknown>;
+  metadata?: EntryMetadata;
 }
 
 // Folder node in tree structure
@@ -67,9 +120,21 @@ export interface FileNode {
   extension: string | null;
   modified: string | null;
   depth: number;
+  metadata?: EntryMetadata;
 }
 
 export type TreeNode = FolderNode | FileNode;
+
+// Metadata statistics
+export interface MetadataStats {
+  species: Record<string, { count: number; size: number }>;
+  projects: Record<string, { count: number; size: number }>;
+  locations: Record<string, { count: number; size: number }>;
+  zones: Record<string, { count: number; size: number }>;
+  equipment: Record<string, { count: number; size: number }>;
+  dataTypes: Record<string, { count: number; size: number }>;
+  hasMetadata: boolean;
+}
 
 // Statistics
 export interface InventoryStats {
@@ -83,6 +148,7 @@ export interface InventoryStats {
   largestFolders: { path: string; name: string; size: number; fileCount: number }[];
   filesByMonth?: Record<string, number>;
   hasDateData: boolean;
+  metadataStats?: MetadataStats;
 }
 
 export interface SizeDistributionBucket {

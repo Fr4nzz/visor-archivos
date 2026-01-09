@@ -4,10 +4,11 @@ import { Home, ChevronRight, RotateCcw } from 'lucide-react';
 import { useInventoryStore } from '../../stores/inventoryStore';
 import { useUIStore } from '../../stores/uiStore';
 import { findNode, getBreadcrumbs } from '../../utils/treeUtils';
-import { getColorByExtension, getColorByCategory, getDepthColor } from '../../utils/colorSchemes';
+import { getColorByExtension, getColorByCategory, getDepthColor, getColorBySpecies, getColorByProject } from '../../utils/colorSchemes';
+import type { TreemapColorBy } from '../../stores/uiStore';
 import { formatSize, truncate } from '../../utils/formatters';
 import { translations } from '../../utils/translations';
-import type { FolderNode, FileNode } from '../../types/inventory';
+import type { FolderNode, FileNode, EntryMetadata } from '../../types/inventory';
 
 interface D3TreeNode {
   name: string;
@@ -17,6 +18,7 @@ interface D3TreeNode {
   extension?: string | null;
   children?: D3TreeNode[];
   hasChildren?: boolean;
+  metadata?: EntryMetadata;
 }
 
 function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 2, currentDepth: number = 0): D3TreeNode {
@@ -27,6 +29,7 @@ function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 2, curre
       type: 'file',
       size: node.size,
       extension: node.extension,
+      metadata: node.metadata,
     };
   }
 
@@ -69,6 +72,7 @@ function getImmediateChildren(node: FolderNode): D3TreeNode[] {
         type: 'file',
         size: child.size,
         extension: child.extension,
+        metadata: child.metadata,
       });
     } else {
       const folder = child as FolderNode;
@@ -197,6 +201,10 @@ export function TreemapView() {
         return getColorByCategory(d.data.extension ?? null);
       case 'depth':
         return getDepthColor(effectiveDepth);
+      case 'species':
+        return getColorBySpecies(d.data.metadata?.species);
+      case 'project':
+        return getColorByProject(d.data.metadata?.project);
       default:
         return getColorByExtension(d.data.extension ?? null);
     }
@@ -529,12 +537,14 @@ export function TreemapView() {
 
           <select
             value={treemapColorBy}
-            onChange={(e) => setTreemapColorBy(e.target.value as 'extension' | 'category' | 'depth')}
+            onChange={(e) => setTreemapColorBy(e.target.value as TreemapColorBy)}
             className="text-sm border border-gray-300 rounded px-2 py-1"
           >
             <option value="extension">{t.colorByExtension}</option>
             <option value="category">{t.colorByCategory}</option>
             <option value="depth">{t.colorByDepth}</option>
+            <option value="species">{language === 'es' ? 'Color por Especie' : 'Color by Species'}</option>
+            <option value="project">{language === 'es' ? 'Color por Proyecto' : 'Color by Project'}</option>
           </select>
         </div>
       </div>
@@ -554,6 +564,41 @@ export function TreemapView() {
             <div className="text-gray-300">{formatSize(hoveredNode.size)}</div>
             {hoveredNode.type === 'file' && hoveredNode.extension && (
               <div className="text-gray-400">{hoveredNode.extension}</div>
+            )}
+            {/* Metadata info */}
+            {hoveredNode.metadata && (
+              <div className="mt-1 pt-1 border-t border-gray-700 space-y-0.5">
+                {hoveredNode.metadata.species && (
+                  <div className="text-green-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Especie:' : 'Species:'}</span> {hoveredNode.metadata.species}
+                  </div>
+                )}
+                {hoveredNode.metadata.project && (
+                  <div className="text-purple-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Proyecto:' : 'Project:'}</span> {hoveredNode.metadata.project}
+                  </div>
+                )}
+                {hoveredNode.metadata.location && (
+                  <div className="text-yellow-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Ubicación:' : 'Location:'}</span> {hoveredNode.metadata.location}
+                  </div>
+                )}
+                {hoveredNode.metadata.zone && (
+                  <div className="text-orange-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Zona:' : 'Zone:'}</span> {hoveredNode.metadata.zone}
+                  </div>
+                )}
+                {hoveredNode.metadata.extracted_date && (
+                  <div className="text-cyan-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Fecha:' : 'Date:'}</span> {hoveredNode.metadata.extracted_date}
+                  </div>
+                )}
+                {hoveredNode.metadata.equipment && (
+                  <div className="text-pink-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Equipo:' : 'Equipment:'}</span> {hoveredNode.metadata.equipment}
+                  </div>
+                )}
+              </div>
             )}
             {hoveredNode.type === 'folder' && hoveredNode.hasChildren && (
               <div className="text-blue-300 text-xs mt-1">{t.clickToExpand}</div>
