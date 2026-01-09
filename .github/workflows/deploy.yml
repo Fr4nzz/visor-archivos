@@ -25,20 +25,17 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: inventory-explorer/package-lock.json
 
       - name: Install dependencies
-        working-directory: inventory-explorer
         run: npm ci
 
       - name: Build
-        working-directory: inventory-explorer
         run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: inventory-explorer/dist
+          path: dist
 
   deploy:
     needs: build
