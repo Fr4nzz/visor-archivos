@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
-import { Home, ChevronRight, ZoomOut } from 'lucide-react';
+import { Home, ChevronRight, RotateCcw } from 'lucide-react';
 import { useInventoryStore } from '../../stores/inventoryStore';
 import { useUIStore } from '../../stores/uiStore';
 import { findNode, getBreadcrumbs } from '../../utils/treeUtils';
@@ -15,9 +15,10 @@ interface D3TreeNode {
   size: number;
   extension?: string | null;
   children?: D3TreeNode[];
+  hasChildren?: boolean;
 }
 
-function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 3, currentDepth: number = 0): D3TreeNode {
+function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 2, currentDepth: number = 0): D3TreeNode {
   if (node.type === 'file') {
     return {
       name: node.name,
@@ -29,6 +30,7 @@ function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 3, curre
   }
 
   const folder = node as FolderNode;
+  const hasChildren = folder.children.size > 0;
 
   if (currentDepth >= maxDepth) {
     return {
@@ -36,6 +38,7 @@ function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 3, curre
       path: folder.path,
       type: 'folder',
       size: folder.size,
+      hasChildren,
     };
   }
 
@@ -49,8 +52,35 @@ function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 3, curre
     path: folder.path,
     type: 'folder',
     size: folder.size,
+    hasChildren,
     children: children.length > 0 ? children : undefined,
   };
+}
+
+// Get immediate children only for expanded folders
+function getImmediateChildren(node: FolderNode): D3TreeNode[] {
+  const children: D3TreeNode[] = [];
+  for (const [, child] of node.children) {
+    if (child.type === 'file') {
+      children.push({
+        name: child.name,
+        path: child.path,
+        type: 'file',
+        size: child.size,
+        extension: child.extension,
+      });
+    } else {
+      const folder = child as FolderNode;
+      children.push({
+        name: folder.name,
+        path: folder.path,
+        type: 'folder',
+        size: folder.size,
+        hasChildren: folder.children.size > 0,
+      });
+    }
+  }
+  return children;
 }
 
 export function TreemapView() {
@@ -61,6 +91,7 @@ export function TreemapView() {
   const [hoveredNode, setHoveredNode] = useState<D3TreeNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
   const currentNode = useMemo(() => {
     if (!folderTree) return null;
@@ -71,11 +102,33 @@ export function TreemapView() {
 
   const breadcrumbs = useMemo(() => getBreadcrumbs(treemapCurrentPath), [treemapCurrentPath]);
 
+  // Toggle folder expansion
+  const toggleExpanded = useCallback((path: string) => {
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        // Collapse: remove this path and all children paths
+        for (const p of next) {
+          if (p === path || p.startsWith(path + '/')) {
+            next.delete(p);
+          }
+        }
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  // Reset expansions
+  const resetExpansions = useCallback(() => {
+    setExpandedPaths(new Set());
+  }, []);
+
   // Resize observer
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Get initial dimensions immediately
     const rect = containerRef.current.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       setDimensions({ width: rect.width, height: rect.height });
@@ -94,20 +147,34 @@ export function TreemapView() {
     return () => resizeObserver.disconnect();
   }, []);
 
-  // Render treemap
+  // Get color function
+  const getColor = useCallback((d: { data: D3TreeNode; depth: number }, baseDepth: number = 0) => {
+    const effectiveDepth = d.depth + baseDepth;
+    if (d.data.type === 'folder') {
+      return treemapColorBy === 'depth' ? getDepthColor(effectiveDepth) : '#FFC107';
+    }
+    switch (treemapColorBy) {
+      case 'category':
+        return getColorByCategory(d.data.extension ?? null);
+      case 'depth':
+        return getDepthColor(effectiveDepth);
+      default:
+        return getColorByExtension(d.data.extension ?? null);
+    }
+  }, [treemapColorBy]);
+
+  // Render treemap with nested expansions
   useEffect(() => {
-    if (!svgRef.current || !currentNode) return;
+    if (!svgRef.current || !currentNode || !folderTree) return;
 
     const { width, height } = dimensions;
-
-    // Don't render if dimensions are too small
     if (width < 50 || height < 50) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
-    // Convert to D3 tree structure
-    const treeData = folderToD3Tree(currentNode, 3);
+    // Convert to D3 tree structure (shallow - just immediate children)
+    const treeData = folderToD3Tree(currentNode, 1);
 
     // Create hierarchy
     const root = d3
@@ -124,102 +191,200 @@ export function TreemapView() {
 
     treemap(root);
 
-    // Get color function
-    const getColor = (d: d3.HierarchyRectangularNode<D3TreeNode>) => {
-      if (d.data.type === 'folder') {
-        return treemapColorBy === 'depth' ? getDepthColor(d.depth) : '#FFC107';
-      }
-      switch (treemapColorBy) {
-        case 'category':
-          return getColorByCategory(d.data.extension ?? null);
-        case 'depth':
-          return getDepthColor(d.depth);
-        default:
-          return getColorByExtension(d.data.extension ?? null);
-      }
-    };
-
-    // Type the treemap result
     type TreemapNode = d3.HierarchyRectangularNode<D3TreeNode>;
 
-    // Render nodes
-    const nodes = svg
-      .selectAll('g')
-      .data(root.descendants().filter((d) => d.depth > 0) as TreemapNode[])
-      .enter()
-      .append('g')
-      .attr('transform', (d) => `translate(${d.x0},${d.y0})`);
+    // Recursive function to render nodes and their expanded children
+    const renderNodes = (
+      parentGroup: d3.Selection<SVGGElement, unknown, null, undefined>,
+      nodes: TreemapNode[],
+      baseDepth: number = 0
+    ) => {
+      const nodeGroups = parentGroup
+        .selectAll<SVGGElement, TreemapNode>(`g.node-depth-${baseDepth}`)
+        .data(nodes)
+        .enter()
+        .append('g')
+        .attr('class', `node-depth-${baseDepth}`)
+        .attr('transform', (d) => `translate(${d.x0},${d.y0})`);
 
-    // Rectangles
-    nodes
-      .append('rect')
-      .attr('width', (d) => Math.max(0, d.x1 - d.x0))
-      .attr('height', (d) => Math.max(0, d.y1 - d.y0))
-      .attr('fill', getColor)
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 1)
-      .attr('rx', 2)
-      .style('cursor', (d) => (d.data.type === 'folder' ? 'pointer' : 'default'))
-      .on('click', (_event, d) => {
-        if (d.data.type === 'folder') {
-          setTreemapCurrentPath(d.data.path);
+      // Rectangles
+      nodeGroups
+        .append('rect')
+        .attr('width', (d) => Math.max(0, d.x1 - d.x0))
+        .attr('height', (d) => Math.max(0, d.y1 - d.y0))
+        .attr('fill', (d) => {
+          // If folder is expanded, use a darker/border color
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
+            return '#333';
+          }
+          return getColor(d, baseDepth);
+        })
+        .attr('stroke', (d) => {
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
+            return '#000';
+          }
+          return '#fff';
+        })
+        .attr('stroke-width', (d) => {
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
+            return 2;
+          }
+          return 1;
+        })
+        .attr('rx', 2)
+        .style('cursor', (d) => (d.data.type === 'folder' && d.data.hasChildren ? 'pointer' : 'default'))
+        .on('click', (_event, d) => {
+          _event.stopPropagation();
+          if (d.data.type === 'folder' && d.data.hasChildren) {
+            toggleExpanded(d.data.path);
+          }
+        })
+        .on('mouseenter', (event, d) => {
+          // Don't show tooltip for expanded folders (they're containers now)
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) return;
+          setHoveredNode(d.data);
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) {
+            setTooltipPos({
+              x: event.clientX - rect.left,
+              y: event.clientY - rect.top,
+            });
+          }
+        })
+        .on('mousemove', (event, d) => {
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) return;
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) {
+            setTooltipPos({
+              x: event.clientX - rect.left,
+              y: event.clientY - rect.top,
+            });
+          }
+        })
+        .on('mouseleave', () => {
+          setHoveredNode(null);
+        });
+
+      // Labels (only for non-expanded or small enough areas)
+      nodeGroups
+        .append('text')
+        .attr('x', 4)
+        .attr('y', 14)
+        .text((d) => {
+          const w = d.x1 - d.x0;
+          const h = d.y1 - d.y0;
+          if (w < 50 || h < 20) return '';
+          // For expanded folders, show name at top
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
+            return truncate(d.data.name, Math.floor(w / 7));
+          }
+          return truncate(d.data.name, Math.floor(w / 7));
+        })
+        .attr('fill', (d) => {
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
+            return '#fff';
+          }
+          return '#fff';
+        })
+        .attr('font-size', '11px')
+        .attr('font-weight', '500')
+        .style('pointer-events', 'none')
+        .style('text-shadow', '0 1px 2px rgba(0,0,0,0.5)');
+
+      // Size labels for non-expanded nodes
+      nodeGroups
+        .append('text')
+        .attr('x', 4)
+        .attr('y', 28)
+        .text((d) => {
+          const w = d.x1 - d.x0;
+          const h = d.y1 - d.y0;
+          if (w < 60 || h < 35) return '';
+          if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) return '';
+          return formatSize(d.value || 0);
+        })
+        .attr('fill', 'rgba(255,255,255,0.8)')
+        .attr('font-size', '10px')
+        .style('pointer-events', 'none');
+
+      // Render children for expanded folders
+      nodeGroups.each(function(d) {
+        if (d.data.type !== 'folder' || !expandedPaths.has(d.data.path)) return;
+
+        const nodeGroup = d3.select(this);
+        const nodeWidth = d.x1 - d.x0;
+        const nodeHeight = d.y1 - d.y0;
+
+        // Minimum size to render children
+        if (nodeWidth < 40 || nodeHeight < 40) return;
+
+        // Find the actual folder node in the tree
+        const actualFolder = findNode(folderTree, d.data.path);
+        if (!actualFolder || actualFolder.type !== 'file') {
+          const folder = actualFolder as FolderNode | null;
+          if (!folder) return;
+
+          // Get children for this folder
+          const childrenData = getImmediateChildren(folder);
+          if (childrenData.length === 0) return;
+
+          // Create a container node for children
+          const containerData: D3TreeNode = {
+            name: folder.name,
+            path: folder.path,
+            type: 'folder',
+            size: folder.size,
+            children: childrenData,
+          };
+
+          // Create child hierarchy
+          const childRoot = d3
+            .hierarchy<D3TreeNode>(containerData)
+            .sum((c) => (c.type === 'file' ? c.size : 0) || (c.children ? 0 : c.size))
+            .sort((a, b) => (b.value || 0) - (a.value || 0));
+
+          // Padding for the label at top
+          const labelPadding = 20;
+          const innerPadding = 4;
+
+          // Create treemap for children within this node's bounds
+          const childTreemap = d3
+            .treemap<D3TreeNode>()
+            .size([nodeWidth - innerPadding * 2, nodeHeight - labelPadding - innerPadding])
+            .padding(2)
+            .round(true);
+
+          childTreemap(childRoot);
+
+          // Create a group for children, offset by padding
+          const childGroup = nodeGroup
+            .append('g')
+            .attr('transform', `translate(${innerPadding},${labelPadding})`);
+
+          // Get child nodes (skip root)
+          const childNodes = childRoot.descendants().filter(c => c.depth > 0) as TreemapNode[];
+
+          // Recursively render children
+          renderNodes(childGroup as unknown as d3.Selection<SVGGElement, unknown, null, undefined>, childNodes, baseDepth + 1);
         }
-      })
-      .on('mouseenter', (event, d) => {
-        setHoveredNode(d.data);
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (rect) {
-          setTooltipPos({
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top,
-          });
-        }
-      })
-      .on('mousemove', (event) => {
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (rect) {
-          setTooltipPos({
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top,
-          });
-        }
-      })
-      .on('mouseleave', () => {
-        setHoveredNode(null);
       });
+    };
 
-    // Labels
-    nodes
-      .append('text')
-      .attr('x', 4)
-      .attr('y', 14)
-      .text((d) => {
-        const width = d.x1 - d.x0;
-        const height = d.y1 - d.y0;
-        if (width < 50 || height < 20) return '';
-        return truncate(d.data.name, Math.floor(width / 7));
-      })
-      .attr('fill', '#fff')
-      .attr('font-size', '11px')
-      .attr('font-weight', '500')
-      .style('pointer-events', 'none')
-      .style('text-shadow', '0 1px 2px rgba(0,0,0,0.5)');
+    // Create main group
+    const mainGroup = svg.append('g');
 
-    // Size labels for larger nodes
-    nodes
-      .append('text')
-      .attr('x', 4)
-      .attr('y', 28)
-      .text((d) => {
-        const width = d.x1 - d.x0;
-        const height = d.y1 - d.y0;
-        if (width < 60 || height < 35) return '';
-        return formatSize(d.value || 0);
-      })
-      .attr('fill', 'rgba(255,255,255,0.8)')
-      .attr('font-size', '10px')
-      .style('pointer-events', 'none');
-  }, [currentNode, dimensions, treemapColorBy, setTreemapCurrentPath]);
+    // Get top-level nodes (skip root)
+    const topNodes = root.descendants().filter(d => d.depth > 0) as TreemapNode[];
+
+    // Render
+    renderNodes(mainGroup as unknown as d3.Selection<SVGGElement, unknown, null, undefined>, topNodes, 0);
+
+  }, [currentNode, dimensions, treemapColorBy, expandedPaths, toggleExpanded, getColor, folderTree]);
+
+  // Reset expansions when path changes
+  useEffect(() => {
+    setExpandedPaths(new Set());
+  }, [treemapCurrentPath]);
 
   if (!folderTree) {
     return (
@@ -257,18 +422,13 @@ export function TreemapView() {
 
         {/* Controls */}
         <div className="flex items-center gap-2">
-          {treemapCurrentPath !== '/' && (
+          {expandedPaths.size > 0 && (
             <button
-              onClick={() => {
-                const parent = breadcrumbs.length > 1
-                  ? breadcrumbs[breadcrumbs.length - 2].path
-                  : '/';
-                setTreemapCurrentPath(parent);
-              }}
+              onClick={resetExpansions}
               className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded"
             >
-              <ZoomOut className="w-4 h-4" />
-              Zoom Out
+              <RotateCcw className="w-4 h-4" />
+              Collapse All
             </button>
           )}
 
@@ -303,8 +463,8 @@ export function TreemapView() {
             {hoveredNode.type === 'file' && hoveredNode.extension && (
               <div className="text-gray-400">{hoveredNode.extension}</div>
             )}
-            {hoveredNode.type === 'folder' && (
-              <div className="text-blue-300 text-xs mt-1">Click to zoom in</div>
+            {hoveredNode.type === 'folder' && hoveredNode.hasChildren && (
+              <div className="text-blue-300 text-xs mt-1">Click to expand</div>
             )}
           </div>
         )}
