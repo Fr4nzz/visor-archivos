@@ -18,6 +18,8 @@ const SIZE_OPTIONS = [
   { label: '> 1 GB', value: 1073741824 },
 ];
 
+const MAX_RESULTS = 10000; // Limit results to prevent UI freeze
+
 export function SearchView() {
   const { entries, stats } = useInventoryStore();
   const [filters, setFilters] = useState<Filters>({
@@ -42,40 +44,69 @@ export function SearchView() {
       .map(([ext]) => ext);
   }, [stats]);
 
-  // Filter entries
-  const filteredResults = useMemo(() => {
-    let results = entries.filter((e) => e.type === 'file');
+  // Check if any filter is active
+  const hasActiveFilters =
+    filters.query ||
+    filters.extensions.length > 0 ||
+    filters.sizeMin !== null ||
+    filters.pathContains;
 
-    if (filters.query) {
-      const query = filters.query.toLowerCase();
-      results = results.filter(
-        (e) =>
-          e.name.toLowerCase().includes(query) ||
-          e.path.toLowerCase().includes(query)
-      );
+  // Filter entries - only process when filters are active to prevent freezing
+  const { filteredResults, totalMatchCount, isLimited } = useMemo(() => {
+    // If no filters are active, don't process the huge array
+    if (!hasActiveFilters) {
+      return { filteredResults: [], totalMatchCount: 0, isLimited: false };
     }
 
-    if (filters.extensions.length > 0) {
-      results = results.filter((e) =>
-        filters.extensions.includes(e.extension || 'no-extension')
-      );
+    let matchCount = 0;
+    const results: typeof entries = [];
+
+    for (const e of entries) {
+      if (e.type !== 'file') continue;
+
+      // Apply filters
+      if (filters.query) {
+        const query = filters.query.toLowerCase();
+        if (!e.name.toLowerCase().includes(query) && !e.path.toLowerCase().includes(query)) {
+          continue;
+        }
+      }
+
+      if (filters.extensions.length > 0) {
+        if (!filters.extensions.includes(e.extension || 'no-extension')) {
+          continue;
+        }
+      }
+
+      if (filters.sizeMin !== null && e.size < filters.sizeMin) {
+        continue;
+      }
+
+      if (filters.sizeMax !== null && e.size > filters.sizeMax) {
+        continue;
+      }
+
+      if (filters.pathContains) {
+        const pathQuery = filters.pathContains.toLowerCase();
+        if (!e.path.toLowerCase().includes(pathQuery)) {
+          continue;
+        }
+      }
+
+      matchCount++;
+
+      // Only keep up to MAX_RESULTS for rendering
+      if (results.length < MAX_RESULTS) {
+        results.push(e);
+      }
     }
 
-    if (filters.sizeMin !== null) {
-      results = results.filter((e) => e.size >= filters.sizeMin!);
-    }
-
-    if (filters.sizeMax !== null) {
-      results = results.filter((e) => e.size <= filters.sizeMax!);
-    }
-
-    if (filters.pathContains) {
-      const pathQuery = filters.pathContains.toLowerCase();
-      results = results.filter((e) => e.path.toLowerCase().includes(pathQuery));
-    }
-
-    return results;
-  }, [entries, filters]);
+    return {
+      filteredResults: results,
+      totalMatchCount: matchCount,
+      isLimited: matchCount > MAX_RESULTS,
+    };
+  }, [entries, filters, hasActiveFilters]);
 
   const virtualizer = useVirtualizer({
     count: filteredResults.length,
@@ -118,12 +149,6 @@ export function SearchView() {
       pathContains: '',
     });
   };
-
-  const hasActiveFilters =
-    filters.query ||
-    filters.extensions.length > 0 ||
-    filters.sizeMin !== null ||
-    filters.pathContains;
 
   return (
     <div className="h-full flex bg-white">
@@ -227,8 +252,13 @@ export function SearchView() {
             className="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             <Download className="w-4 h-4" />
-            Export {formatNumber(filteredResults.length)} results
+            Export {formatNumber(Math.min(filteredResults.length, MAX_RESULTS))} results
           </button>
+          {isLimited && (
+            <p className="mt-2 text-xs text-amber-600">
+              Showing first {formatNumber(MAX_RESULTS)} of {formatNumber(totalMatchCount)} matches. Use more specific filters.
+            </p>
+          )}
         </div>
       )}
 
@@ -245,7 +275,9 @@ export function SearchView() {
               {showFilters ? 'Hide Filters' : 'Show Filters'}
             </button>
             <span className="text-sm text-gray-500">
-              {formatNumber(filteredResults.length)} results
+              {isLimited
+                ? `${formatNumber(totalMatchCount)} results (showing ${formatNumber(MAX_RESULTS)})`
+                : `${formatNumber(filteredResults.length)} results`}
             </span>
           </div>
         </div>
@@ -297,7 +329,18 @@ export function SearchView() {
             })}
           </div>
 
-          {filteredResults.length === 0 && (
+          {!hasActiveFilters && (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8">
+              <Search className="w-12 h-12 mb-4 text-gray-300" />
+              <p className="text-lg font-medium mb-2">Start searching</p>
+              <p className="text-sm text-center">
+                Use the filters on the left to search through your files.
+                <br />
+                Try searching by name, path, file type, or size.
+              </p>
+            </div>
+          )}
+          {hasActiveFilters && filteredResults.length === 0 && (
             <div className="flex items-center justify-center h-full text-gray-500">
               No files match your filters
             </div>
