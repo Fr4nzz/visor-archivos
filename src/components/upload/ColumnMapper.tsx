@@ -81,19 +81,24 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
       is_system_file: null,
     };
 
-    // Use initial mapping if provided
-    if (initialMapping) {
-      return {
-        ...initial,
-        ...initialMapping,
-      };
-    }
-
-    // Auto-detect columns
+    // Auto-detect columns first
     console.log('[ColumnMapper] Starting auto-detection for headers:', headers);
     console.log('[ColumnMapper] metadataFields array:', metadataFields);
     for (const field of [...requiredFields, ...optionalFields, ...metadataFields]) {
       initial[field] = autoDetectColumn(headers, field);
+    }
+    console.log('[ColumnMapper] Auto-detected mapping:', initial);
+
+    // Merge with initial mapping if provided (only for fields that were previously mapped)
+    if (initialMapping) {
+      console.log('[ColumnMapper] Merging with initialMapping:', initialMapping);
+      for (const field of [...requiredFields, ...optionalFields, ...metadataFields]) {
+        const mappedValue = initialMapping[field as keyof typeof initialMapping];
+        // Only use initialMapping value if it's set AND the column exists in current headers
+        if (mappedValue && headers.includes(mappedValue)) {
+          initial[field] = mappedValue;
+        }
+      }
     }
 
     console.log('[ColumnMapper] Final mapping result:', initial);
