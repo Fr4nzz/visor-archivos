@@ -26,9 +26,12 @@ function autoDetectColumn(headers: string[], field: FieldKey): string | null {
   const aliases = COLUMN_ALIASES[field];
   const lowerHeaders = headers.map((h) => h.toLowerCase());
 
+  console.log(`[AutoDetect] Field: ${field}, Aliases:`, aliases, 'Headers:', lowerHeaders);
+
   for (const alias of aliases) {
     const index = lowerHeaders.indexOf(alias.toLowerCase());
     if (index !== -1) {
+      console.log(`[AutoDetect] MATCH! Field ${field} matched alias "${alias}" to header "${headers[index]}"`);
       return headers[index];
     }
   }
@@ -37,10 +40,12 @@ function autoDetectColumn(headers: string[], field: FieldKey): string | null {
   for (const alias of aliases) {
     const index = lowerHeaders.findIndex((h) => h.includes(alias.toLowerCase()));
     if (index !== -1) {
+      console.log(`[AutoDetect] FUZZY MATCH! Field ${field} matched alias "${alias}" to header "${headers[index]}"`);
       return headers[index];
     }
   }
 
+  console.log(`[AutoDetect] NO MATCH for field ${field}`);
   return null;
 }
 
@@ -85,10 +90,13 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
     }
 
     // Auto-detect columns
+    console.log('[ColumnMapper] Starting auto-detection for headers:', headers);
+    console.log('[ColumnMapper] metadataFields array:', metadataFields);
     for (const field of [...requiredFields, ...optionalFields, ...metadataFields]) {
       initial[field] = autoDetectColumn(headers, field);
     }
 
+    console.log('[ColumnMapper] Final mapping result:', initial);
     return initial;
   });
 
