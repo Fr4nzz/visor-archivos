@@ -3,6 +3,8 @@ import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import Papa from 'papaparse';
 import { useInventoryStore } from '../../stores/inventoryStore';
+import { useUIStore } from '../../stores/uiStore';
+import { translations } from '../../utils/translations';
 
 interface DropZoneProps {
   onFileLoaded: (file: File, headers: string[], preview: Record<string, string>[]) => void;
@@ -12,12 +14,14 @@ export function DropZone({ onFileLoaded }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isLoading } = useInventoryStore();
+  const { language } = useUIStore();
+  const t = translations[language];
 
   const handleFile = useCallback((file: File) => {
     setError(null);
 
     if (!file.name.endsWith('.csv')) {
-      setError('Please upload a CSV file');
+      setError(t.pleaseUploadCSV);
       return;
     }
 
@@ -44,7 +48,7 @@ export function DropZone({ onFileLoaded }: DropZoneProps) {
         setError(`Error reading file: ${err.message}`);
       },
     });
-  }, [onFileLoaded]);
+  }, [onFileLoaded, t.pleaseUploadCSV]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -128,15 +132,15 @@ export function DropZone({ onFileLoaded }: DropZoneProps) {
           </div>
 
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            {isDragging ? 'Drop your CSV file' : 'Drag & Drop your inventory CSV'}
+            {isDragging ? t.dropFile : t.dragDropTitle}
           </h2>
 
           <p className="text-gray-500 text-center mb-4">
-            or click to browse your files
+            {t.clickToBrowse}
           </p>
 
           <p className="text-sm text-gray-400">
-            Supports files up to 500 MB
+            {t.supportsFiles}
           </p>
         </label>
       </div>
@@ -150,14 +154,14 @@ export function DropZone({ onFileLoaded }: DropZoneProps) {
 
       <div className="mt-8 text-center">
         <p className="text-sm text-gray-500">
-          Don't have an inventory file?{' '}
+          {t.noInventoryFile}{' '}
           <a
             href="https://github.com"
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 hover:underline"
           >
-            Learn how to create one
+            {t.learnHow}
           </a>
         </p>
       </div>

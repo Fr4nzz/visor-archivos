@@ -1,8 +1,13 @@
 import { create } from 'zustand';
+import { type Language } from '../utils/translations';
 
 export type TabId = 'navigator' | 'treemap' | 'stats' | 'search';
 
 interface UIState {
+  // Language
+  language: Language;
+  setLanguage: (lang: Language) => void;
+
   // Active tab
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
@@ -23,6 +28,9 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
+  language: 'en',
+  setLanguage: (lang) => set({ language: lang }),
+
   activeTab: 'navigator',
   setActiveTab: (tab) => set({ activeTab: tab }),
 

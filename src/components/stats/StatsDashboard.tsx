@@ -13,8 +13,10 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useInventoryStore } from '../../stores/inventoryStore';
+import { useUIStore } from '../../stores/uiStore';
 import { formatSize, formatNumber } from '../../utils/formatters';
 import { getColorByExtension } from '../../utils/colorSchemes';
+import { translations } from '../../utils/translations';
 
 type PieChartMode = 'size' | 'count';
 
@@ -40,12 +42,14 @@ function SummaryCard({ title, value, icon }: SummaryCardProps) {
 
 export function StatsDashboard() {
   const { stats } = useInventoryStore();
+  const { language } = useUIStore();
+  const t = translations[language];
   const [pieChartMode, setPieChartMode] = useState<PieChartMode>('size');
 
   if (!stats) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500">
-        No data loaded
+        {t.noDataLoaded}
       </div>
     );
   }
@@ -81,22 +85,22 @@ export function StatsDashboard() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <SummaryCard
-          title="Total Files"
+          title={t.totalFiles}
           value={formatNumber(stats.totalFiles)}
           icon={<File className="w-6 h-6" />}
         />
         <SummaryCard
-          title="Total Size"
+          title={t.totalSize}
           value={formatSize(stats.totalSize)}
           icon={<Database className="w-6 h-6" />}
         />
         <SummaryCard
-          title="Folders"
+          title={t.foldersLabel}
           value={formatNumber(stats.totalFolders)}
           icon={<Folder className="w-6 h-6" />}
         />
         <SummaryCard
-          title="File Types"
+          title={t.fileTypes}
           value={formatNumber(Object.keys(stats.extensionCounts).length)}
           icon={<PieChart className="w-6 h-6" />}
         />
@@ -108,7 +112,7 @@ export function StatsDashboard() {
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">
-              {pieChartMode === 'size' ? 'Storage by File Type' : 'Files by Type'}
+              {pieChartMode === 'size' ? t.storageByFileType : t.filesByType}
             </h3>
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               <button
@@ -119,7 +123,7 @@ export function StatsDashboard() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                By Size
+                {t.bySize}
               </button>
               <button
                 onClick={() => setPieChartMode('count')}
@@ -129,7 +133,7 @@ export function StatsDashboard() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                By Count
+                {t.byCount}
               </button>
             </div>
           </div>
@@ -155,7 +159,7 @@ export function StatsDashboard() {
                   formatter={(value) =>
                     pieChartMode === 'size'
                       ? formatSize(Number(value))
-                      : `${formatNumber(Number(value))} files`
+                      : `${formatNumber(Number(value))} ${t.files}`
                   }
                 />
               </RechartsPieChart>
@@ -165,7 +169,7 @@ export function StatsDashboard() {
 
         {/* Size Distribution Bar Chart */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">File Size Distribution</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.fileSizeDistribution}</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData}>
@@ -177,7 +181,7 @@ export function StatsDashboard() {
                     name === 'count' ? formatNumber(Number(value)) : formatSize(Number(value))
                   }
                 />
-                <Bar dataKey="count" fill="#3B82F6" name="File Count" />
+                <Bar dataKey="count" fill="#3B82F6" name={t.fileCount} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -188,7 +192,7 @@ export function StatsDashboard() {
       <div className="grid grid-cols-2 gap-6">
         {/* Largest Files */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Largest Files</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.largestFiles}</h3>
           <div className="space-y-2 max-h-96 overflow-auto">
             {stats.largestFiles.slice(0, 15).map((file, i) => (
               <div
@@ -222,7 +226,7 @@ export function StatsDashboard() {
 
         {/* Largest Folders */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Largest Folders</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.largestFolders}</h3>
           <div className="space-y-2 max-h-96 overflow-auto">
             {stats.largestFolders.slice(0, 15).map((folder, i) => (
               <div
@@ -236,7 +240,7 @@ export function StatsDashboard() {
                     {folder.name}
                   </span>
                   <span className="text-xs text-gray-500">
-                    ({formatNumber(folder.fileCount)} files)
+                    ({formatNumber(folder.fileCount)} {t.files})
                   </span>
                 </div>
                 <span className="text-sm font-medium text-gray-700 ml-2 flex-shrink-0">
@@ -250,16 +254,16 @@ export function StatsDashboard() {
 
       {/* Extension breakdown table */}
       <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">All File Types</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.allFileTypes}</h3>
         <div className="overflow-x-auto max-h-96">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
-                <th className="px-4 py-2 text-left font-medium text-gray-600">Extension</th>
-                <th className="px-4 py-2 text-right font-medium text-gray-600">Count</th>
-                <th className="px-4 py-2 text-right font-medium text-gray-600">Total Size</th>
-                <th className="px-4 py-2 text-right font-medium text-gray-600">Avg Size</th>
-                <th className="px-4 py-2 text-right font-medium text-gray-600">% of Total</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">{t.extension}</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-600">{t.count}</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-600">{t.totalSize}</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-600">{t.avgSize}</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-600">{t.percentOfTotal}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">

@@ -1,22 +1,24 @@
 import { FolderTree, LayoutGrid, BarChart3, Search } from 'lucide-react';
 import { useUIStore, type TabId } from '../../stores/uiStore';
+import { translations, type TranslationKey } from '../../utils/translations';
 import { clsx } from 'clsx';
 
 interface Tab {
   id: TabId;
-  label: string;
+  labelKey: TranslationKey;
   icon: React.ComponentType<{ className?: string }>;
 }
 
 const tabs: Tab[] = [
-  { id: 'navigator', label: 'Navigator', icon: FolderTree },
-  { id: 'treemap', label: 'Treemap', icon: LayoutGrid },
-  { id: 'stats', label: 'Statistics', icon: BarChart3 },
-  { id: 'search', label: 'Search', icon: Search },
+  { id: 'navigator', labelKey: 'navigator', icon: FolderTree },
+  { id: 'treemap', labelKey: 'treemap', icon: LayoutGrid },
+  { id: 'stats', labelKey: 'statistics', icon: BarChart3 },
+  { id: 'search', labelKey: 'search', icon: Search },
 ];
 
 export function TabNavigation() {
-  const { activeTab, setActiveTab } = useUIStore();
+  const { activeTab, setActiveTab, language } = useUIStore();
+  const t = translations[language];
 
   return (
     <nav className="bg-white border-b border-gray-200">
@@ -37,7 +39,7 @@ export function TabNavigation() {
               )}
             >
               <Icon className="w-4 h-4" />
-              {tab.label}
+              {t[tab.labelKey]}
             </button>
           );
         })}
