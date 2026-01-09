@@ -17,8 +17,9 @@ type FieldKey = keyof typeof COLUMN_ALIASES;
 const requiredFields: FieldKey[] = ['path', 'type', 'size'];
 const optionalFields: FieldKey[] = ['name', 'extension', 'modified', 'parent', 'depth', 'hash'];
 const metadataFields: FieldKey[] = [
-  'extracted_date', 'species', 'project', 'location', 'zone',
-  'equipment', 'data_type', 'camera_id'
+  'extracted_date', 'date_precision', 'species', 'equipment', 'location', 'zone',
+  'project', 'data_type', 'climate_variable', 'climate_extent', 'camera_id',
+  'sequence_number', 'deforestation_period', 'is_system_file'
 ];
 
 function autoDetectColumn(headers: string[], field: FieldKey): string | null {
