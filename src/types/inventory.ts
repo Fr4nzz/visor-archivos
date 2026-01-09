@@ -38,7 +38,7 @@ export type ColumnMapping = RequiredFields & OptionalFields & MetadataFields;
 // Common column name variations to auto-detect
 export const COLUMN_ALIASES: Record<keyof ColumnMapping, string[]> = {
   // Required
-  path: ['path', 'filepath', 'file_path', 'fullpath', 'full_path', 'location'],
+  path: ['path', 'filepath', 'file_path', 'fullpath', 'full_path', 'ruta'],
   type: ['type', 'kind', 'item_type', 'entry_type', 'filetype'],
   size: ['size', 'size_bytes', 'bytes', 'filesize', 'file_size', 'length'],
   // Optional
