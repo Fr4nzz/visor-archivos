@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { CheckCircle2, AlertCircle, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { COLUMN_ALIASES, type ColumnMapping } from '../../types/inventory';
+import { useUIStore } from '../../stores/uiStore';
+import { translations } from '../../utils/translations';
 
 interface ColumnMapperProps {
   headers: string[];
@@ -38,6 +40,9 @@ function autoDetectColumn(headers: string[], field: FieldKey): string | null {
 }
 
 export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: ColumnMapperProps) {
+  const { language } = useUIStore();
+  const t = translations[language];
+
   const [mapping, setMapping] = useState<Record<FieldKey, string | null>>(() => {
     const initial: Record<FieldKey, string | null> = {
       path: null,
@@ -110,28 +115,34 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
   };
 
   const fieldLabels: Record<FieldKey, string> = {
-    path: 'File Path',
-    type: 'Item Type',
-    size: 'Size (bytes)',
-    name: 'Name',
-    extension: 'Extension',
-    modified: 'Modified Date',
-    parent: 'Parent Folder',
-    depth: 'Folder Depth',
-    hash: 'Content Hash',
+    path: t.filePath,
+    type: t.itemType,
+    size: t.fileSize,
+    name: t.fileName,
+    extension: t.extensionField,
+    modified: t.modifiedDate,
+    parent: t.parentFolder,
+    depth: language === 'es' ? 'Profundidad de Carpeta' : 'Folder Depth',
+    hash: language === 'es' ? 'Hash de Contenido' : 'Content Hash',
   };
+
+  const required = language === 'es' ? 'Requerido' : 'Required';
+  const selectColumnText = language === 'es' ? '-- Seleccionar columna --' : '-- Select column --';
+  const notMappedText = language === 'es' ? '-- Sin mapear --' : '-- Not mapped --';
+  const previewText = language === 'es' ? 'Vista previa (primeras 5 filas)' : 'Preview (first 5 rows)';
+  const continueText = language === 'es' ? 'Continuar' : 'Continue';
 
   return (
     <div className="max-w-4xl mx-auto p-8">
       <div className="bg-white rounded-xl shadow-lg p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Map Your CSV Columns</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">{t.mapColumns}</h2>
         <p className="text-gray-500 mb-6">
-          We'll try to auto-detect your columns. Please verify and adjust if needed.
+          {t.mapColumnsDesc}
         </p>
 
         {/* Detected columns */}
         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm font-medium text-gray-700 mb-2">Your CSV columns:</p>
+          <p className="text-sm font-medium text-gray-700 mb-2">{t.yourCsvColumns}</p>
           <div className="flex flex-wrap gap-2">
             {headers.map((header) => (
               <span
@@ -147,7 +158,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
         <div className="space-y-6">
           {/* Required fields */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Required Mappings</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">{t.requiredMappings}</h3>
             <div className="space-y-3">
               {requiredFields.map((field) => (
                 <div key={field} className="flex items-center gap-4">
@@ -162,7 +173,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
                       mapping[field] ? 'border-gray-300' : 'border-red-300 bg-red-50'
                     )}
                   >
-                    <option value="">-- Select column --</option>
+                    <option value="">{selectColumnText}</option>
                     {headers.map((header) => (
                       <option key={header} value={header}>
                         {header}
@@ -172,13 +183,13 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
                   {mapping[field] && autoDetected.has(field) && (
                     <span className="flex items-center gap-1 text-xs text-green-600">
                       <CheckCircle2 className="w-4 h-4" />
-                      Auto-detected
+                      {t.autoDetected}
                     </span>
                   )}
                   {!mapping[field] && (
                     <span className="flex items-center gap-1 text-xs text-red-600">
                       <AlertCircle className="w-4 h-4" />
-                      Required
+                      {required}
                     </span>
                   )}
                 </div>
@@ -188,7 +199,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
 
           {/* Optional fields */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Optional Mappings</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">{t.optionalMappings}</h3>
             <div className="space-y-3">
               {optionalFields.map((field) => (
                 <div key={field} className="flex items-center gap-4">
@@ -200,7 +211,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
                     onChange={(e) => handleChange(field, e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="">-- Not mapped --</option>
+                    <option value="">{notMappedText}</option>
                     {headers.map((header) => (
                       <option key={header} value={header}>
                         {header}
@@ -210,7 +221,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
                   {mapping[field] && autoDetected.has(field) && (
                     <span className="flex items-center gap-1 text-xs text-green-600">
                       <CheckCircle2 className="w-4 h-4" />
-                      Auto-detected
+                      {t.autoDetected}
                     </span>
                   )}
                 </div>
@@ -221,7 +232,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
 
         {/* Preview */}
         <div className="mt-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Preview (first 5 rows)</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">{previewText}</h3>
           <div className="overflow-x-auto border border-gray-200 rounded-lg">
             <table className="min-w-full text-xs">
               <thead className="bg-gray-50">
@@ -264,7 +275,7 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             )}
           >
-            Continue
+            {continueText}
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

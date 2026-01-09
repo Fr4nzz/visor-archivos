@@ -6,6 +6,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { findNode, getBreadcrumbs } from '../../utils/treeUtils';
 import { getColorByExtension, getColorByCategory, getDepthColor } from '../../utils/colorSchemes';
 import { formatSize, truncate } from '../../utils/formatters';
+import { translations } from '../../utils/translations';
 import type { FolderNode, FileNode } from '../../types/inventory';
 
 interface D3TreeNode {
@@ -88,7 +89,8 @@ export function TreemapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const { folderTree } = useInventoryStore();
-  const { treemapCurrentPath, setTreemapCurrentPath, treemapColorBy, setTreemapColorBy } = useUIStore();
+  const { treemapCurrentPath, setTreemapCurrentPath, treemapColorBy, setTreemapColorBy, language } = useUIStore();
+  const t = translations[language];
   const [hoveredNode, setHoveredNode] = useState<D3TreeNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -448,7 +450,8 @@ export function TreemapView() {
       treemap(root);
 
       // Check children for large tiles
-      const children = root.descendants().filter(d => d.depth === 1);
+      type TreemapNodeLocal = d3.HierarchyRectangularNode<D3TreeNode>;
+      const children = root.descendants().filter(d => d.depth === 1) as TreemapNodeLocal[];
 
       for (const child of children) {
         if (child.data.type !== 'folder' || !child.data.hasChildren) continue;
@@ -481,7 +484,7 @@ export function TreemapView() {
   if (!folderTree) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500">
-        No data loaded
+        {t.noDataLoaded}
       </div>
     );
   }
@@ -497,7 +500,7 @@ export function TreemapView() {
             className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded"
           >
             <Home className="w-4 h-4" />
-            Root
+            {t.root}
           </button>
           {breadcrumbs.map((crumb) => (
             <div key={crumb.path} className="flex items-center">
@@ -520,7 +523,7 @@ export function TreemapView() {
               className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded"
             >
               <RotateCcw className="w-4 h-4" />
-              Collapse All
+              {t.collapseAll}
             </button>
           )}
 
@@ -529,9 +532,9 @@ export function TreemapView() {
             onChange={(e) => setTreemapColorBy(e.target.value as 'extension' | 'category' | 'depth')}
             className="text-sm border border-gray-300 rounded px-2 py-1"
           >
-            <option value="extension">Color by Extension</option>
-            <option value="category">Color by Category</option>
-            <option value="depth">Color by Depth</option>
+            <option value="extension">{t.colorByExtension}</option>
+            <option value="category">{t.colorByCategory}</option>
+            <option value="depth">{t.colorByDepth}</option>
           </select>
         </div>
       </div>
@@ -553,7 +556,7 @@ export function TreemapView() {
               <div className="text-gray-400">{hoveredNode.extension}</div>
             )}
             {hoveredNode.type === 'folder' && hoveredNode.hasChildren && (
-              <div className="text-blue-300 text-xs mt-1">Click to expand</div>
+              <div className="text-blue-300 text-xs mt-1">{t.clickToExpand}</div>
             )}
           </div>
         )}

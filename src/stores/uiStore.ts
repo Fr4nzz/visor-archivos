@@ -28,7 +28,7 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  language: 'en',
+  language: 'es',
   setLanguage: (lang) => set({ language: lang }),
 
   activeTab: 'navigator',

@@ -46,19 +46,30 @@ export const translations = {
 
     // Column Mapper
     mapColumns: 'Map Your CSV Columns',
-    mapColumnsDesc: 'Match your CSV columns to the required fields',
-    requiredFields: 'Required Fields',
-    optionalFields: 'Optional Fields',
+    mapColumnsDesc: "We'll try to auto-detect your columns. Please verify and adjust if needed.",
+    yourCsvColumns: 'Your CSV columns:',
+    requiredMappings: 'Required Mappings',
+    optionalMappings: 'Optional Mappings',
     preview: 'Preview',
     filePath: 'File Path',
-    fileSize: 'File Size',
+    fileSize: 'Size (bytes)',
+    itemType: 'Item Type',
+    fileName: 'Name',
+    extensionField: 'Extension',
+    modifiedDate: 'Modified Date',
+    parentFolder: 'Parent Folder',
     selectColumn: 'Select column...',
+    autoDetected: 'Auto-detected',
     cancel: 'Cancel',
     processFile: 'Process File',
 
     // Loading
-    processing: 'Processing...',
-    rowsProcessed: 'rows processed',
+    processingInventory: 'Processing your inventory',
+    parsingCsv: 'Parsing CSV...',
+    buildingFolderTree: 'Building folder tree...',
+    calculatingStatistics: 'Calculating statistics...',
+    complete: 'Complete!',
+    rows: 'rows',
 
     // Search
     searchPlaceholder: 'Search files by name, path, or extension...',
@@ -69,6 +80,13 @@ export const translations = {
     root: 'Root',
     items: 'items',
     empty: 'Empty folder',
+
+    // Treemap
+    collapseAll: 'Collapse All',
+    colorByExtension: 'Color by Extension',
+    colorByCategory: 'Color by Category',
+    colorByDepth: 'Color by Depth',
+    clickToExpand: 'Click to expand',
   },
   es: {
     // Header
@@ -115,19 +133,30 @@ export const translations = {
 
     // Column Mapper
     mapColumns: 'Mapea las Columnas del CSV',
-    mapColumnsDesc: 'Asocia las columnas de tu CSV con los campos requeridos',
-    requiredFields: 'Campos Requeridos',
-    optionalFields: 'Campos Opcionales',
+    mapColumnsDesc: 'Intentaremos auto-detectar tus columnas. Por favor verifica y ajusta si es necesario.',
+    yourCsvColumns: 'Tus columnas CSV:',
+    requiredMappings: 'Mapeos Requeridos',
+    optionalMappings: 'Mapeos Opcionales',
     preview: 'Vista Previa',
     filePath: 'Ruta del Archivo',
-    fileSize: 'Tamaño del Archivo',
+    fileSize: 'Tamaño (bytes)',
+    itemType: 'Tipo de Elemento',
+    fileName: 'Nombre',
+    extensionField: 'Extensión',
+    modifiedDate: 'Fecha de Modificación',
+    parentFolder: 'Carpeta Padre',
     selectColumn: 'Seleccionar columna...',
+    autoDetected: 'Auto-detectado',
     cancel: 'Cancelar',
     processFile: 'Procesar Archivo',
 
     // Loading
-    processing: 'Procesando...',
-    rowsProcessed: 'filas procesadas',
+    processingInventory: 'Procesando tu inventario',
+    parsingCsv: 'Analizando CSV...',
+    buildingFolderTree: 'Construyendo árbol de carpetas...',
+    calculatingStatistics: 'Calculando estadísticas...',
+    complete: '¡Completo!',
+    rows: 'filas',
 
     // Search
     searchPlaceholder: 'Buscar archivos por nombre, ruta o extensión...',
@@ -138,6 +167,13 @@ export const translations = {
     root: 'Raíz',
     items: 'elementos',
     empty: 'Carpeta vacía',
+
+    // Treemap
+    collapseAll: 'Contraer Todo',
+    colorByExtension: 'Color por Extensión',
+    colorByCategory: 'Color por Categoría',
+    colorByDepth: 'Color por Profundidad',
+    clickToExpand: 'Clic para expandir',
   },
 } as const;
 
