@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { File, Folder, Database, PieChart } from 'lucide-react';
 import {
   PieChart as RechartsPieChart,
@@ -14,6 +15,8 @@ import {
 import { useInventoryStore } from '../../stores/inventoryStore';
 import { formatSize, formatNumber } from '../../utils/formatters';
 import { getColorByExtension } from '../../utils/colorSchemes';
+
+type PieChartMode = 'size' | 'count';
 
 interface SummaryCardProps {
   title: string;
@@ -37,6 +40,7 @@ function SummaryCard({ title, value, icon }: SummaryCardProps) {
 
 export function StatsDashboard() {
   const { stats } = useInventoryStore();
+  const [pieChartMode, setPieChartMode] = useState<PieChartMode>('size');
 
   if (!stats) {
     return (
@@ -46,15 +50,24 @@ export function StatsDashboard() {
     );
   }
 
-  // Prepare pie chart data (top 10 extensions by size)
-  const pieData = Object.entries(stats.sizeByExtension)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 10)
-    .map(([ext, size]) => ({
-      name: ext,
-      value: size,
-      color: getColorByExtension(ext),
-    }));
+  // Prepare pie chart data (top 10 extensions by size or count)
+  const pieData = pieChartMode === 'size'
+    ? Object.entries(stats.sizeByExtension)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10)
+        .map(([ext, size]) => ({
+          name: ext,
+          value: size,
+          color: getColorByExtension(ext),
+        }))
+    : Object.entries(stats.extensionCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10)
+        .map(([ext, count]) => ({
+          name: ext,
+          value: count,
+          color: getColorByExtension(ext),
+        }));
 
   // Prepare bar chart data (size distribution)
   const barData = stats.sizeDistribution.map((bucket) => ({
@@ -93,7 +106,33 @@ export function StatsDashboard() {
       <div className="grid grid-cols-2 gap-6 mb-6">
         {/* File Type Pie Chart */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Storage by File Type</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {pieChartMode === 'size' ? 'Storage by File Type' : 'Files by Type'}
+            </h3>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setPieChartMode('size')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  pieChartMode === 'size'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                By Size
+              </button>
+              <button
+                onClick={() => setPieChartMode('count')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  pieChartMode === 'count'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                By Count
+              </button>
+            </div>
+          </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPieChart>
@@ -113,7 +152,11 @@ export function StatsDashboard() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value) => formatSize(Number(value))}
+                  formatter={(value) =>
+                    pieChartMode === 'size'
+                      ? formatSize(Number(value))
+                      : `${formatNumber(Number(value))} files`
+                  }
                 />
               </RechartsPieChart>
             </ResponsiveContainer>
