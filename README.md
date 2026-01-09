@@ -1,73 +1,105 @@
-# React + TypeScript + Vite
+# Inventory Explorer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación web para visualizar inventarios de archivos grandes. Diseñada para manejar archivos CSV de más de 100MB con cientos de miles de filas.
 
-Currently, two official plugins are available:
+## Características
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Carga de archivos CSV** - Arrastra y suelta o selecciona archivos CSV de inventario
+- **Mapeo de columnas** - Auto-detecta y permite mapear columnas del CSV
+- **Navegador de carpetas** - Explora la estructura de carpetas con lista virtualizada
+- **Treemap interactivo** - Visualización estilo SpaceSniffer con expansión anidada
+- **Dashboard de estadísticas** - Gráficos de distribución por tipo, extensión y tamaño
+- **Búsqueda y filtros** - Busca archivos por nombre, extensión, tamaño y fecha
+- **Exportación** - Exporta resultados filtrados a CSV
 
-## React Compiler
+## Demo
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+La aplicación está disponible en: https://fr4nzz.github.io/Dropbox_inv/
 
-## Expanding the ESLint configuration
+## Uso
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Opción 1: Usar la aplicación web
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. Visita la [demo](https://fr4nzz.github.io/Dropbox_inv/)
+2. Arrastra tu archivo CSV de inventario o haz clic para seleccionarlo
+3. Verifica el mapeo de columnas y haz clic en "Continue"
+4. Explora tu inventario usando las pestañas: Navigator, Treemap, Stats, Search
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Opción 2: Ejecutar localmente
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# Clonar el repositorio
+git clone https://github.com/Fr4nzz/Dropbox_inv.git
+cd Dropbox_inv
+
+# Instalar dependencias
+npm install
+
+# Iniciar servidor de desarrollo
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Crear inventario de Dropbox
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+El script `create_dropbox_inventory/create_inventory.py` genera un inventario CSV de tu cuenta de Dropbox.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Requisitos
+
+- Python 3.8+
+- Token de acceso de Dropbox API
+
+### Uso
+
+1. Obtén un token de acceso en [Dropbox App Console](https://www.dropbox.com/developers/apps)
+2. Edita `create_inventory.py` y reemplaza `YOUR_ACCESS_TOKEN_HERE` con tu token
+3. Ejecuta el script:
+
+```bash
+cd create_dropbox_inventory
+python create_inventory.py
 ```
+
+El inventario se guardará en `inventory_output_hybrid/inventory.csv`
+
+## Formato del CSV
+
+El CSV debe contener al menos estas columnas (los nombres pueden variar):
+
+| Columna | Descripción | Requerida |
+|---------|-------------|-----------|
+| path | Ruta completa del archivo | Sí |
+| type | "file" o "folder" | Sí |
+| size_bytes | Tamaño en bytes | Sí |
+| name | Nombre del archivo | No |
+| extension | Extensión del archivo | No |
+| modified | Fecha de modificación | No |
+
+## Tecnologías
+
+- **React 18** + TypeScript
+- **Vite** - Build tool
+- **Tailwind CSS** - Estilos
+- **D3.js** - Visualización treemap
+- **Recharts** - Gráficos de estadísticas
+- **Zustand** - Estado global
+- **Web Workers** - Procesamiento de CSV en segundo plano
+- **@tanstack/react-virtual** - Virtualización de listas grandes
+
+## Estructura del proyecto
+
+```
+.
+├── src/                    # Código fuente de la aplicación
+│   ├── components/         # Componentes React
+│   ├── stores/             # Estado global (Zustand)
+│   ├── utils/              # Utilidades
+│   ├── workers/            # Web Workers
+│   └── types/              # Tipos TypeScript
+├── create_dropbox_inventory/   # Script para crear inventario
+│   └── create_inventory.py
+└── public/                 # Archivos estáticos
+```
+
+## Licencia
+
+MIT
