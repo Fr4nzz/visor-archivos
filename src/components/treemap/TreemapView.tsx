@@ -305,17 +305,17 @@ export function TreemapView() {
       // Labels (only for non-expanded or small enough areas)
       nodeGroups
         .append('text')
-        .attr('x', 4)
-        .attr('y', 14)
+        .attr('x', 6)
+        .attr('y', 20)
         .text((d) => {
           const w = d.x1 - d.x0;
           const h = d.y1 - d.y0;
-          if (w < 50 || h < 20) return '';
+          if (w < 60 || h < 25) return '';
           // For expanded folders, show name at top
           if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
-            return truncate(d.data.name, Math.floor(w / 7));
+            return truncate(d.data.name, Math.floor(w / 9));
           }
-          return truncate(d.data.name, Math.floor(w / 7));
+          return truncate(d.data.name, Math.floor(w / 9));
         })
         .attr('fill', (d) => {
           if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
@@ -323,25 +323,25 @@ export function TreemapView() {
           }
           return '#fff';
         })
-        .attr('font-size', '11px')
-        .attr('font-weight', '500')
+        .attr('font-size', '14px')
+        .attr('font-weight', '600')
         .style('pointer-events', 'none')
-        .style('text-shadow', '0 1px 2px rgba(0,0,0,0.5)');
+        .style('text-shadow', '0 1px 3px rgba(0,0,0,0.6)');
 
       // Size labels for non-expanded nodes
       nodeGroups
         .append('text')
-        .attr('x', 4)
-        .attr('y', 28)
+        .attr('x', 6)
+        .attr('y', 38)
         .text((d) => {
           const w = d.x1 - d.x0;
           const h = d.y1 - d.y0;
-          if (w < 60 || h < 35) return '';
+          if (w < 70 || h < 50) return '';
           if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) return '';
           return formatSize(d.value || 0);
         })
-        .attr('fill', 'rgba(255,255,255,0.8)')
-        .attr('font-size', '10px')
+        .attr('fill', 'rgba(255,255,255,0.9)')
+        .attr('font-size', '12px')
         .style('pointer-events', 'none');
 
       // Render children for expanded folders
@@ -380,8 +380,8 @@ export function TreemapView() {
             .sum((c) => (c.type === 'file' ? c.size : 0) || (c.children ? 0 : c.size))
             .sort((a, b) => (b.value || 0) - (a.value || 0));
 
-          // Padding for the label at top
-          const labelPadding = 20;
+          // Padding for the label at top (larger now for bigger text)
+          const labelPadding = 28;
           const innerPadding = 4;
 
           // Create treemap for children within this node's bounds
@@ -418,10 +418,65 @@ export function TreemapView() {
 
   }, [currentNode, dimensions, treemapColorBy, expandedPaths, toggleExpanded, getColor, folderTree]);
 
-  // Reset expansions when path changes
+  // Auto-expand folders that occupy more than 50% of the area
   useEffect(() => {
-    setExpandedPaths(new Set());
-  }, [treemapCurrentPath]);
+    if (!currentNode || !folderTree) return;
+
+    const { width, height } = dimensions;
+    if (width < 50 || height < 50) return;
+
+    const totalArea = width * height;
+    const autoExpandPaths = new Set<string>();
+
+    // Recursive function to find and expand large folders
+    const findLargeFolders = (node: FolderNode, parentArea: number, currentExpandedPaths: Set<string>) => {
+      // Convert to D3 tree structure
+      const treeData = folderToD3Tree(node, 1);
+
+      const root = d3
+        .hierarchy<D3TreeNode>(treeData)
+        .sum((d) => (d.type === 'file' ? d.size : 0) || (d.children ? 0 : d.size))
+        .sort((a, b) => (b.value || 0) - (a.value || 0));
+
+      // Create treemap layout
+      const treemap = d3
+        .treemap<D3TreeNode>()
+        .size([Math.sqrt(parentArea), Math.sqrt(parentArea)]) // Approximate square for calculation
+        .padding(2)
+        .round(true);
+
+      treemap(root);
+
+      // Check children for large tiles
+      const children = root.descendants().filter(d => d.depth === 1);
+
+      for (const child of children) {
+        if (child.data.type !== 'folder' || !child.data.hasChildren) continue;
+
+        const childArea = (child.x1 - child.x0) * (child.y1 - child.y0);
+        const ratio = childArea / parentArea;
+
+        // If folder takes more than 50% of parent area, auto-expand it
+        if (ratio > 0.5) {
+          currentExpandedPaths.add(child.data.path);
+
+          // Find the actual folder and recursively check its children
+          const actualFolder = findNode(folderTree, child.data.path);
+          if (actualFolder && actualFolder.type === 'folder') {
+            findLargeFolders(actualFolder as FolderNode, childArea, currentExpandedPaths);
+          }
+        }
+      }
+    };
+
+    findLargeFolders(currentNode, totalArea, autoExpandPaths);
+
+    if (autoExpandPaths.size > 0) {
+      setExpandedPaths(autoExpandPaths);
+    } else {
+      setExpandedPaths(new Set());
+    }
+  }, [treemapCurrentPath, currentNode, folderTree, dimensions]);
 
   if (!folderTree) {
     return (
