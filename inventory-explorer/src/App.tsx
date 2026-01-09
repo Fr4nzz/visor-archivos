@@ -132,7 +132,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
       <Header />
       {appState === 'ready' && <TabNavigation />}
       <main className="flex-1 overflow-hidden">{renderContent()}</main>

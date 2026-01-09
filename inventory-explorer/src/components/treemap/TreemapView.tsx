@@ -60,7 +60,7 @@ export function TreemapView() {
   const { treemapCurrentPath, setTreemapCurrentPath, treemapColorBy, setTreemapColorBy } = useUIStore();
   const [hoveredNode, setHoveredNode] = useState<D3TreeNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   const currentNode = useMemo(() => {
     if (!folderTree) return null;
@@ -75,10 +75,18 @@ export function TreemapView() {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Get initial dimensions immediately
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setDimensions({ width: rect.width, height: rect.height });
+    }
+
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        setDimensions({ width, height });
+        if (width > 0 && height > 0) {
+          setDimensions({ width, height });
+        }
       }
     });
 
@@ -90,10 +98,13 @@ export function TreemapView() {
   useEffect(() => {
     if (!svgRef.current || !currentNode) return;
 
+    const { width, height } = dimensions;
+
+    // Don't render if dimensions are too small
+    if (width < 50 || height < 50) return;
+
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
-
-    const { width, height } = dimensions;
 
     // Convert to D3 tree structure
     const treeData = folderToD3Tree(currentNode, 3);
