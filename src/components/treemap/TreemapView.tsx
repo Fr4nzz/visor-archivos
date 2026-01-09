@@ -86,12 +86,49 @@ function getImmediateChildren(node: FolderNode): D3TreeNode[] {
 export function TreemapView() {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const { folderTree } = useInventoryStore();
   const { treemapCurrentPath, setTreemapCurrentPath, treemapColorBy, setTreemapColorBy } = useUIStore();
   const [hoveredNode, setHoveredNode] = useState<D3TreeNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  // Calculate smart tooltip position to keep it within the visible area
+  const getTooltipStyle = useCallback(() => {
+    const offset = 10;
+    const tooltipWidth = tooltipRef.current?.offsetWidth || 200;
+    const tooltipHeight = tooltipRef.current?.offsetHeight || 80;
+
+    let left = tooltipPos.x + offset;
+    let top = tooltipPos.y + offset;
+
+    // Check right edge overflow - position to left of cursor if needed
+    if (left + tooltipWidth > dimensions.width) {
+      left = tooltipPos.x - tooltipWidth - offset;
+    }
+
+    // Check bottom edge overflow - position above cursor if needed
+    if (top + tooltipHeight > dimensions.height) {
+      top = tooltipPos.y - tooltipHeight - offset;
+    }
+
+    // Ensure tooltip doesn't go beyond left edge
+    if (left < 0) {
+      left = offset;
+    }
+
+    // Ensure tooltip doesn't go beyond top edge
+    if (top < 0) {
+      top = offset;
+    }
+
+    return {
+      left,
+      top,
+      maxWidth: '300px',
+    };
+  }, [tooltipPos, dimensions]);
 
   const currentNode = useMemo(() => {
     if (!folderTree) return null;
@@ -451,12 +488,9 @@ export function TreemapView() {
         {/* Tooltip */}
         {hoveredNode && (
           <div
+            ref={tooltipRef}
             className="absolute pointer-events-none bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm z-50"
-            style={{
-              left: tooltipPos.x + 10,
-              top: tooltipPos.y + 10,
-              maxWidth: '300px',
-            }}
+            style={getTooltipStyle()}
           >
             <div className="font-medium">{hoveredNode.name}</div>
             <div className="text-gray-300">{formatSize(hoveredNode.size)}</div>
