@@ -138,22 +138,56 @@ export function StatsDashboard() {
   const [showProjection, setShowProjection] = useState(false);
   const [projectionModel, setProjectionModel] = useState<ProjectionModel>('linear');
 
-  // Calculate historical cumulative storage by year
-  const historicalData = useMemo(() => {
-    if (!stats?.hasDateData || !stats.filesByMonth) return [];
+  // Extract year from date string, handling various formats including year-only
+  const extractYear = (dateStr: string | null | undefined): number | null => {
+    if (!dateStr || dateStr === '') return null;
+    const str = String(dateStr).trim();
 
-    // Group by year
+    // If it's just a 4-digit year
+    if (/^\d{4}$/.test(str)) {
+      return parseInt(str);
+    }
+
+    // Try parsing as full date (YYYY-MM-DD, etc.)
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const year = parsed.getFullYear();
+      if (year >= 1990 && year <= 2030) return year;
+    }
+
+    // Try extracting first 4 digits if they look like a year
+    const match = str.match(/^(\d{4})/);
+    if (match) {
+      const year = parseInt(match[1]);
+      if (year >= 1990 && year <= 2030) return year;
+    }
+
+    return null;
+  };
+
+  // Calculate historical cumulative storage by year directly from entries
+  const historicalData = useMemo(() => {
+    if (!entries || entries.length === 0) return [];
+
+    // Group by year - calculate actual size per year
     const byYear: Record<number, number> = {};
-    for (const [month, count] of Object.entries(stats.filesByMonth)) {
-      const year = parseInt(month.split('-')[0]);
-      if (!isNaN(year)) {
-        // Approximate size per file
-        const avgSize = stats.totalSize / stats.totalFiles;
-        byYear[year] = (byYear[year] || 0) + count * avgSize;
+    let hasAnyDate = false;
+
+    for (const entry of entries) {
+      if (entry.type !== 'file') continue;
+
+      const dateStr = entry.metadata?.extracted_date;
+      const year = extractYear(dateStr);
+
+      if (year !== null && year >= 1990 && year <= new Date().getFullYear()) {
+        hasAnyDate = true;
+        byYear[year] = (byYear[year] || 0) + entry.size;
       }
     }
 
-    // Convert to cumulative
+    if (!hasAnyDate) return [];
+
+    // Convert to cumulative, sorted by year
     const years = Object.keys(byYear).map(Number).sort();
     if (years.length === 0) return [];
 
@@ -171,7 +205,7 @@ export function StatsDashboard() {
     }
 
     return data;
-  }, [stats, entries]);
+  }, [entries]);
 
   // Calculate projection
   const projectionData = useMemo(() => {
@@ -372,7 +406,7 @@ export function StatsDashboard() {
       </div>
 
       {/* Historical Data Collection Growth Chart */}
-      {stats.hasDateData && historicalData.length > 0 && (
+      {historicalData.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
