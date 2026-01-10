@@ -38,13 +38,14 @@ const COLUMNS: ColumnDef[] = [
   { key: 'size', label: 'Size', labelEs: 'Tamaño', width: 100 },
   { key: 'modified', label: 'Modified', labelEs: 'Modificado', width: 150 },
   // Taxonomy columns
+  { key: 'taxa_verbatim', label: 'Taxon (Original)', labelEs: 'Taxón (Original)', width: 180, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_interpreted', label: 'Taxon (Interpreted)', labelEs: 'Taxón (Interpretado)', width: 180, metadata: true, filterType: 'dropdown' },
   { key: 'taxa_kingdom', label: 'Kingdom', labelEs: 'Reino', width: 100, metadata: true, filterType: 'dropdown' },
   { key: 'taxa_phylum', label: 'Phylum', labelEs: 'Filo', width: 100, metadata: true, filterType: 'dropdown' },
   { key: 'taxa_class', label: 'Class', labelEs: 'Clase', width: 100, metadata: true, filterType: 'dropdown' },
   { key: 'taxa_order', label: 'Order', labelEs: 'Orden', width: 100, metadata: true, filterType: 'dropdown' },
   { key: 'taxa_family', label: 'Family', labelEs: 'Familia', width: 120, metadata: true, filterType: 'dropdown' },
   { key: 'taxa_genus', label: 'Genus', labelEs: 'Género', width: 120, metadata: true, filterType: 'dropdown' },
-  { key: 'taxa_interpreted', label: 'Species', labelEs: 'Especie', width: 180, metadata: true, filterType: 'dropdown' },
   { key: 'taxa_common_name', label: 'Common Name', labelEs: 'Nombre Común', width: 150, metadata: true, filterType: 'dropdown' },
   // Equipment & Location
   { key: 'project', label: 'Project', labelEs: 'Proyecto', width: 150, metadata: true, filterType: 'dropdown' },
@@ -52,8 +53,10 @@ const COLUMNS: ColumnDef[] = [
   { key: 'zone', label: 'Zone', labelEs: 'Zona', width: 100, metadata: true, filterType: 'dropdown' },
   { key: 'equipment', label: 'Equipment', labelEs: 'Equipo', width: 120, metadata: true, filterType: 'dropdown' },
   { key: 'data_type', label: 'Data Type', labelEs: 'Tipo Datos', width: 100, metadata: true, filterType: 'dropdown' },
-  // Date
-  { key: 'extracted_date', label: 'Date', labelEs: 'Fecha', width: 120, metadata: true, filterType: 'date' },
+  // Date fields
+  { key: 'extracted_date', label: 'Extracted Date', labelEs: 'Fecha Extraída', width: 120, metadata: true, filterType: 'date' },
+  { key: 'date_precision', label: 'Date Precision', labelEs: 'Precisión Fecha', width: 100, metadata: true, filterType: 'dropdown' },
+  { key: 'date_format_hint', label: 'Date Format', labelEs: 'Formato Fecha', width: 120, metadata: true, filterType: 'dropdown' },
   // Other
   { key: 'camera_id', label: 'Camera', labelEs: 'Cámara', width: 100, metadata: true, filterType: 'dropdown' },
 ];
@@ -150,13 +153,14 @@ export function DataTableView() {
       case 'size': return entry.size;
       case 'modified': return entry.modified;
       // Taxonomy
+      case 'taxa_verbatim': return entry.metadata?.taxa_verbatim || null;
+      case 'taxa_interpreted': return entry.metadata?.taxa_interpreted || null;
       case 'taxa_kingdom': return entry.metadata?.taxa_kingdom || null;
       case 'taxa_phylum': return entry.metadata?.taxa_phylum || null;
       case 'taxa_class': return entry.metadata?.taxa_class || null;
       case 'taxa_order': return entry.metadata?.taxa_order || null;
       case 'taxa_family': return entry.metadata?.taxa_family || null;
       case 'taxa_genus': return entry.metadata?.taxa_genus || null;
-      case 'taxa_interpreted': return entry.metadata?.taxa_interpreted || null;
       case 'taxa_common_name': return entry.metadata?.taxa_common_name || null;
       // Equipment & Location
       case 'species': return entry.metadata?.species || null;
@@ -165,8 +169,11 @@ export function DataTableView() {
       case 'zone': return entry.metadata?.zone || null;
       case 'equipment': return entry.metadata?.equipment || null;
       case 'data_type': return entry.metadata?.data_type || null;
-      // Date & other
+      // Date fields
       case 'extracted_date': return entry.metadata?.extracted_date || null;
+      case 'date_precision': return entry.metadata?.date_precision || null;
+      case 'date_format_hint': return entry.metadata?.date_format_hint || null;
+      // Other
       case 'camera_id': return entry.metadata?.camera_id || null;
       default: return null;
     }
@@ -190,6 +197,7 @@ export function DataTableView() {
           switch (col) {
             case 'type': return entry.type;
             case 'extension': return entry.extension;
+            case 'taxa_verbatim': return entry.metadata?.taxa_verbatim;
             case 'taxa_kingdom': return entry.metadata?.taxa_kingdom;
             case 'taxa_phylum': return entry.metadata?.taxa_phylum;
             case 'taxa_class': return entry.metadata?.taxa_class;
@@ -198,6 +206,8 @@ export function DataTableView() {
             case 'taxa_genus': return entry.metadata?.taxa_genus;
             case 'taxa_interpreted': return entry.metadata?.taxa_interpreted;
             case 'taxa_common_name': return entry.metadata?.taxa_common_name;
+            case 'date_precision': return entry.metadata?.date_precision;
+            case 'date_format_hint': return entry.metadata?.date_format_hint;
             case 'project': return entry.metadata?.project;
             case 'location': return entry.metadata?.location;
             case 'zone': return entry.metadata?.zone;
