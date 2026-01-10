@@ -17,8 +17,20 @@ import { useUIStore } from '../../stores/uiStore';
 import { formatSize, formatNumber } from '../../utils/formatters';
 import { getColorByExtension, getColorBySpecies, getColorByProject } from '../../utils/colorSchemes';
 import { translations } from '../../utils/translations';
+import type { TaxonomyLevel } from '../../types/inventory';
 
 type PieChartMode = 'size' | 'count';
+
+// Taxonomy level labels for dropdown
+const TAXONOMY_LABELS: Record<TaxonomyLevel, { en: string; es: string }> = {
+  kingdom: { en: 'Kingdom', es: 'Reino' },
+  phylum: { en: 'Phylum', es: 'Filo' },
+  class: { en: 'Class', es: 'Clase' },
+  order: { en: 'Order', es: 'Orden' },
+  family: { en: 'Family', es: 'Familia' },
+  genus: { en: 'Genus', es: 'Género' },
+  species: { en: 'Species', es: 'Especie' },
+};
 
 interface SummaryCardProps {
   title: string;
@@ -45,6 +57,7 @@ export function StatsDashboard() {
   const { language } = useUIStore();
   const t = translations[language];
   const [pieChartMode, setPieChartMode] = useState<PieChartMode>('size');
+  const [taxonomyLevel, setTaxonomyLevel] = useState<TaxonomyLevel>('species');
 
   if (!stats) {
     return (
@@ -260,49 +273,76 @@ export function StatsDashboard() {
           </h2>
 
           <div className="grid grid-cols-2 gap-6 mb-6">
-            {/* Species Distribution */}
-            {Object.keys(stats.metadataStats.species).length > 0 && (
+            {/* Taxonomy Distribution */}
+            {(stats.metadataStats.hasTaxonomy || Object.keys(stats.metadataStats.species).length > 0) && (
               <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  {language === 'es' ? 'Distribución por Especie' : 'Distribution by Species'}
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {language === 'es' ? 'Distribución por' : 'Distribution by'}
+                  </h3>
+                  <select
+                    value={taxonomyLevel}
+                    onChange={(e) => setTaxonomyLevel(e.target.value as TaxonomyLevel)}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {(Object.keys(TAXONOMY_LABELS) as TaxonomyLevel[]).map((level) => {
+                      // Check if this level has data
+                      const hasData = stats.metadataStats?.taxonomy?.[level]
+                        ? Object.keys(stats.metadataStats.taxonomy[level]).length > 0
+                        : (level === 'species' && Object.keys(stats.metadataStats?.species || {}).length > 0);
+                      if (!hasData) return null;
+                      return (
+                        <option key={level} value={level}>
+                          {language === 'es' ? TAXONOMY_LABELS[level].es : TAXONOMY_LABELS[level].en}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
                 <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
-                      <Pie
-                        data={Object.entries(stats.metadataStats.species)
-                          .sort(([, a], [, b]) => b.size - a.size)
-                          .slice(0, 10)
-                          .map(([name, data]) => ({
-                            name,
-                            value: data.size,
-                            count: data.count,
-                            color: getColorBySpecies(name),
-                          }))}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={({ name, percent }) =>
-                          percent && percent > 0.05 ? `${name || ''} (${(percent * 100).toFixed(0)}%)` : ''
-                        }
-                      >
-                        {Object.entries(stats.metadataStats.species)
-                          .sort(([, a], [, b]) => b.size - a.size)
-                          .slice(0, 10)
-                          .map(([name], index) => (
-                            <Cell key={`cell-${index}`} fill={getColorBySpecies(name)} />
-                          ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value, name, props) => [
-                          `${formatSize(Number(value))} (${props.payload.count} ${t.files})`,
-                          name
-                        ]}
-                      />
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
+                  {(() => {
+                    // Get data based on selected taxonomy level
+                    const taxData = stats.metadataStats?.taxonomy?.[taxonomyLevel]
+                      || (taxonomyLevel === 'species' ? stats.metadataStats?.species : {})
+                      || {};
+                    const sortedData = Object.entries(taxData)
+                      .sort(([, a], [, b]) => b.size - a.size)
+                      .slice(0, 10)
+                      .map(([name, data]) => ({
+                        name,
+                        value: data.size,
+                        count: data.count,
+                        color: getColorBySpecies(name),
+                      }));
+
+                    return (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsPieChart>
+                          <Pie
+                            data={sortedData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={100}
+                            label={({ name, percent }) =>
+                              percent && percent > 0.05 ? `${name || ''} (${(percent * 100).toFixed(0)}%)` : ''
+                            }
+                          >
+                            {sortedData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value, name, props) => [
+                              `${formatSize(Number(value))} (${props.payload.count} ${t.files})`,
+                              name
+                            ]}
+                          />
+                        </RechartsPieChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -355,43 +395,52 @@ export function StatsDashboard() {
             )}
           </div>
 
-          {/* Species Table */}
-          {Object.keys(stats.metadataStats.species).length > 0 && (
+          {/* Taxonomy Table */}
+          {(stats.metadataStats.hasTaxonomy || Object.keys(stats.metadataStats.species).length > 0) && (
             <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                {language === 'es' ? 'Todas las Especies' : 'All Species'}
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {language === 'es'
+                    ? `Todos: ${TAXONOMY_LABELS[taxonomyLevel].es}`
+                    : `All: ${TAXONOMY_LABELS[taxonomyLevel].en}`}
+                </h3>
+              </div>
               <div className="overflow-x-auto max-h-64">
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left font-medium text-gray-600">
-                        {language === 'es' ? 'Especie' : 'Species'}
+                        {language === 'es' ? TAXONOMY_LABELS[taxonomyLevel].es : TAXONOMY_LABELS[taxonomyLevel].en}
                       </th>
                       <th className="px-4 py-2 text-right font-medium text-gray-600">{t.count}</th>
                       <th className="px-4 py-2 text-right font-medium text-gray-600">{t.totalSize}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {Object.entries(stats.metadataStats.species)
-                      .sort(([, a], [, b]) => b.size - a.size)
-                      .map(([species, data]) => (
-                        <tr key={species} className="hover:bg-gray-50">
-                          <td className="px-4 py-2">
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                              style={{
-                                backgroundColor: `${getColorBySpecies(species)}20`,
-                                color: getColorBySpecies(species),
-                              }}
-                            >
-                              {species}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-right text-gray-900">{formatNumber(data.count)}</td>
-                          <td className="px-4 py-2 text-right text-gray-900">{formatSize(data.size)}</td>
-                        </tr>
-                      ))}
+                    {(() => {
+                      const taxData = stats.metadataStats?.taxonomy?.[taxonomyLevel]
+                        || (taxonomyLevel === 'species' ? stats.metadataStats?.species : {})
+                        || {};
+                      return Object.entries(taxData)
+                        .sort(([, a], [, b]) => b.size - a.size)
+                        .map(([name, data]) => (
+                          <tr key={name} className="hover:bg-gray-50">
+                            <td className="px-4 py-2">
+                              <span
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                                style={{
+                                  backgroundColor: `${getColorBySpecies(name)}20`,
+                                  color: getColorBySpecies(name),
+                                }}
+                              >
+                                {name}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-right text-gray-900">{formatNumber(data.count)}</td>
+                            <td className="px-4 py-2 text-right text-gray-900">{formatSize(data.size)}</td>
+                          </tr>
+                        ));
+                    })()}
                   </tbody>
                 </table>
               </div>

@@ -66,7 +66,7 @@ const initialState = {
   fileName: null,
   currentPath: '/',
   expandedPaths: new Set<string>(),
-  showFiles: false,
+  showFiles: true,  // Show files by default
   flattenedTree: [],
 };
 

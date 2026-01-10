@@ -13,25 +13,49 @@ type SortConfig = { column: string; direction: SortDirection };
 interface ColumnFilter {
   column: string;
   value: string;
-  type: 'text' | 'select';
+  type: 'text' | 'select' | 'dateRange';
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+type FilterType = 'text' | 'dropdown' | 'date';
+
+interface ColumnDef {
+  key: string;
+  label: string;
+  labelEs: string;
+  width: number;
+  metadata?: boolean;
+  filterType?: FilterType;
 }
 
 // Available columns
-const COLUMNS = [
+const COLUMNS: ColumnDef[] = [
   { key: 'name', label: 'Name', labelEs: 'Nombre', width: 250 },
   { key: 'path', label: 'Path', labelEs: 'Ruta', width: 400 },
-  { key: 'type', label: 'Type', labelEs: 'Tipo', width: 80 },
-  { key: 'extension', label: 'Ext', labelEs: 'Ext', width: 70 },
+  { key: 'type', label: 'Type', labelEs: 'Tipo', width: 80, filterType: 'dropdown' },
+  { key: 'extension', label: 'Ext', labelEs: 'Ext', width: 70, filterType: 'dropdown' },
   { key: 'size', label: 'Size', labelEs: 'Tamaño', width: 100 },
   { key: 'modified', label: 'Modified', labelEs: 'Modificado', width: 150 },
-  { key: 'species', label: 'Species', labelEs: 'Especie', width: 150, metadata: true },
-  { key: 'project', label: 'Project', labelEs: 'Proyecto', width: 150, metadata: true },
-  { key: 'location', label: 'Location', labelEs: 'Ubicación', width: 120, metadata: true },
-  { key: 'zone', label: 'Zone', labelEs: 'Zona', width: 100, metadata: true },
-  { key: 'equipment', label: 'Equipment', labelEs: 'Equipo', width: 120, metadata: true },
-  { key: 'extracted_date', label: 'Date', labelEs: 'Fecha', width: 120, metadata: true },
-  { key: 'data_type', label: 'Data Type', labelEs: 'Tipo Datos', width: 100, metadata: true },
-  { key: 'camera_id', label: 'Camera', labelEs: 'Cámara', width: 100, metadata: true },
+  // Taxonomy columns
+  { key: 'taxa_kingdom', label: 'Kingdom', labelEs: 'Reino', width: 100, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_phylum', label: 'Phylum', labelEs: 'Filo', width: 100, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_class', label: 'Class', labelEs: 'Clase', width: 100, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_order', label: 'Order', labelEs: 'Orden', width: 100, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_family', label: 'Family', labelEs: 'Familia', width: 120, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_genus', label: 'Genus', labelEs: 'Género', width: 120, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_interpreted', label: 'Species', labelEs: 'Especie', width: 180, metadata: true, filterType: 'dropdown' },
+  { key: 'taxa_common_name', label: 'Common Name', labelEs: 'Nombre Común', width: 150, metadata: true, filterType: 'dropdown' },
+  // Equipment & Location
+  { key: 'project', label: 'Project', labelEs: 'Proyecto', width: 150, metadata: true, filterType: 'dropdown' },
+  { key: 'location', label: 'Location', labelEs: 'Ubicación', width: 120, metadata: true, filterType: 'dropdown' },
+  { key: 'zone', label: 'Zone', labelEs: 'Zona', width: 100, metadata: true, filterType: 'dropdown' },
+  { key: 'equipment', label: 'Equipment', labelEs: 'Equipo', width: 120, metadata: true, filterType: 'dropdown' },
+  { key: 'data_type', label: 'Data Type', labelEs: 'Tipo Datos', width: 100, metadata: true, filterType: 'dropdown' },
+  // Date
+  { key: 'extracted_date', label: 'Date', labelEs: 'Fecha', width: 120, metadata: true, filterType: 'date' },
+  // Other
+  { key: 'camera_id', label: 'Camera', labelEs: 'Cámara', width: 100, metadata: true, filterType: 'dropdown' },
 ];
 
 export function DataTableView() {
@@ -42,6 +66,7 @@ export function DataTableView() {
   const [filters, setFilters] = useState<ColumnFilter[]>([]);
   const [globalSearch, setGlobalSearch] = useState('');
   const [activeFilterColumn, setActiveFilterColumn] = useState<string | null>(null);
+  const [dropdownSearch, setDropdownSearch] = useState<string>('');
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(COLUMNS.filter(c => !c.metadata).map(c => c.key))
   );
@@ -99,6 +124,22 @@ export function DataTableView() {
     }
   }, [resizing, handleResizeMove, handleResizeEnd]);
 
+  // Reset dropdown search when filter column changes
+  useEffect(() => {
+    setDropdownSearch('');
+  }, [activeFilterColumn]);
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (activeFilterColumn && !(e.target as Element).closest('.filter-dropdown-container')) {
+        setActiveFilterColumn(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeFilterColumn]);
+
   // Get cell value helper
   const getCellValue = useCallback((entry: InventoryEntry, column: string): string | number | null => {
     switch (column) {
@@ -108,17 +149,70 @@ export function DataTableView() {
       case 'extension': return entry.extension;
       case 'size': return entry.size;
       case 'modified': return entry.modified;
+      // Taxonomy
+      case 'taxa_kingdom': return entry.metadata?.taxa_kingdom || null;
+      case 'taxa_phylum': return entry.metadata?.taxa_phylum || null;
+      case 'taxa_class': return entry.metadata?.taxa_class || null;
+      case 'taxa_order': return entry.metadata?.taxa_order || null;
+      case 'taxa_family': return entry.metadata?.taxa_family || null;
+      case 'taxa_genus': return entry.metadata?.taxa_genus || null;
+      case 'taxa_interpreted': return entry.metadata?.taxa_interpreted || null;
+      case 'taxa_common_name': return entry.metadata?.taxa_common_name || null;
+      // Equipment & Location
       case 'species': return entry.metadata?.species || null;
       case 'project': return entry.metadata?.project || null;
       case 'location': return entry.metadata?.location || null;
       case 'zone': return entry.metadata?.zone || null;
       case 'equipment': return entry.metadata?.equipment || null;
-      case 'extracted_date': return entry.metadata?.extracted_date || null;
       case 'data_type': return entry.metadata?.data_type || null;
+      // Date & other
+      case 'extracted_date': return entry.metadata?.extracted_date || null;
       case 'camera_id': return entry.metadata?.camera_id || null;
       default: return null;
     }
   }, []);
+
+  // Date range filter state
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+
+  // Get unique values for dropdown filters (memoized)
+  const uniqueValuesCache = useMemo(() => {
+    const cache: Record<string, string[]> = {};
+    const dropdownCols = COLUMNS.filter(c => c.filterType === 'dropdown').map(c => c.key);
+
+    for (const col of dropdownCols) {
+      const values = new Set<string>();
+      // Sample entries for performance
+      const sample = entries.slice(0, 50000);
+      for (const entry of sample) {
+        const val = (() => {
+          switch (col) {
+            case 'type': return entry.type;
+            case 'extension': return entry.extension;
+            case 'taxa_kingdom': return entry.metadata?.taxa_kingdom;
+            case 'taxa_phylum': return entry.metadata?.taxa_phylum;
+            case 'taxa_class': return entry.metadata?.taxa_class;
+            case 'taxa_order': return entry.metadata?.taxa_order;
+            case 'taxa_family': return entry.metadata?.taxa_family;
+            case 'taxa_genus': return entry.metadata?.taxa_genus;
+            case 'taxa_interpreted': return entry.metadata?.taxa_interpreted;
+            case 'taxa_common_name': return entry.metadata?.taxa_common_name;
+            case 'project': return entry.metadata?.project;
+            case 'location': return entry.metadata?.location;
+            case 'zone': return entry.metadata?.zone;
+            case 'equipment': return entry.metadata?.equipment;
+            case 'data_type': return entry.metadata?.data_type;
+            case 'camera_id': return entry.metadata?.camera_id;
+            default: return null;
+          }
+        })();
+        if (val) values.add(val);
+      }
+      cache[col] = Array.from(values).sort();
+    }
+    return cache;
+  }, [entries]);
 
   // Filter and sort data
   const filteredData = useMemo(() => {
@@ -132,10 +226,23 @@ export function DataTableView() {
           entry.name.toLowerCase().includes(search) ||
           entry.path.toLowerCase().includes(search) ||
           entry.extension?.toLowerCase().includes(search) ||
-          entry.metadata?.species?.toLowerCase().includes(search) ||
+          entry.metadata?.taxa_interpreted?.toLowerCase().includes(search) ||
+          entry.metadata?.taxa_common_name?.toLowerCase().includes(search) ||
           entry.metadata?.project?.toLowerCase().includes(search) ||
           entry.metadata?.location?.toLowerCase().includes(search)
         );
+      });
+    }
+
+    // Apply date range filter
+    if (dateFrom || dateTo) {
+      data = data.filter(entry => {
+        const entryDate = entry.metadata?.extracted_date;
+        if (!entryDate) return false;
+        const dateStr = entryDate.split('T')[0]; // Get just the date part
+        if (dateFrom && dateStr < dateFrom) return false;
+        if (dateTo && dateStr > dateTo) return false;
+        return true;
       });
     }
 
@@ -172,7 +279,7 @@ export function DataTableView() {
     }
 
     return data;
-  }, [entries, globalSearch, filters, sort, getCellValue]);
+  }, [entries, globalSearch, filters, sort, getCellValue, dateFrom, dateTo]);
 
   // Virtual row renderer
   const rowVirtualizer = useVirtualizer({
@@ -289,6 +396,34 @@ export function DataTableView() {
             {language === 'es' ? 'Exportar' : 'Export'}
           </button>
 
+          {/* Date range filter */}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-500">{language === 'es' ? 'Fecha:' : 'Date:'}</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs"
+              placeholder={language === 'es' ? 'Desde' : 'From'}
+            />
+            <span className="text-gray-400">-</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs"
+              placeholder={language === 'es' ? 'Hasta' : 'To'}
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           <div className="text-sm text-gray-500">
             {filteredData.length.toLocaleString()} / {entries.length.toLocaleString()} {language === 'es' ? 'filas' : 'rows'}
           </div>
@@ -359,7 +494,7 @@ export function DataTableView() {
               return (
                 <div
                   key={col.key}
-                  className="flex-none relative group"
+                  className="flex-none relative group filter-dropdown-container"
                   style={{ width: columnWidths[col.key] }}
                 >
                   <div
@@ -404,17 +539,77 @@ export function DataTableView() {
                   />
 
                   {/* Filter dropdown */}
-                  {activeFilterColumn === col.key && (
-                    <div className="px-2 pb-2 bg-gray-50 border-b border-gray-200">
-                      <input
-                        type="text"
-                        placeholder={language === 'es' ? 'Filtrar...' : 'Filter...'}
-                        value={currentFilter?.value || ''}
-                        onChange={(e) => handleFilterChange(col.key, e.target.value)}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                      />
+                  {activeFilterColumn === col.key && col.filterType !== 'date' && (
+                    <div
+                      className="absolute top-full left-0 z-20 bg-white border border-gray-200 rounded shadow-lg min-w-[180px] max-w-[300px]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {col.filterType === 'dropdown' ? (
+                        // Searchable dropdown for dropdown columns
+                        <div className="p-2">
+                          <input
+                            type="text"
+                            placeholder={language === 'es' ? 'Buscar...' : 'Search...'}
+                            value={dropdownSearch}
+                            onChange={(e) => setDropdownSearch(e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 mb-2"
+                            autoFocus
+                          />
+                          <div className="max-h-48 overflow-y-auto">
+                            {currentFilter?.value && (
+                              <button
+                                onClick={() => {
+                                  handleFilterChange(col.key, '');
+                                  setActiveFilterColumn(null);
+                                  setDropdownSearch('');
+                                }}
+                                className="w-full px-2 py-1 text-left text-xs text-red-600 hover:bg-red-50 rounded"
+                              >
+                                {language === 'es' ? '✕ Limpiar filtro' : '✕ Clear filter'}
+                              </button>
+                            )}
+                            {(uniqueValuesCache[col.key] || [])
+                              .filter(val => !dropdownSearch || val.toLowerCase().includes(dropdownSearch.toLowerCase()))
+                              .slice(0, 100)
+                              .map(val => (
+                                <button
+                                  key={val}
+                                  onClick={() => {
+                                    handleFilterChange(col.key, val);
+                                    setActiveFilterColumn(null);
+                                    setDropdownSearch('');
+                                  }}
+                                  className={clsx(
+                                    'w-full px-2 py-1 text-left text-xs rounded truncate',
+                                    currentFilter?.value === val
+                                      ? 'bg-blue-100 text-blue-700'
+                                      : 'hover:bg-gray-100 text-gray-700'
+                                  )}
+                                  title={val}
+                                >
+                                  {val}
+                                </button>
+                              ))}
+                            {(uniqueValuesCache[col.key] || []).filter(val => !dropdownSearch || val.toLowerCase().includes(dropdownSearch.toLowerCase())).length === 0 && (
+                              <div className="px-2 py-1 text-xs text-gray-400 italic">
+                                {language === 'es' ? 'Sin resultados' : 'No results'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        // Text input for text columns
+                        <div className="p-2">
+                          <input
+                            type="text"
+                            placeholder={language === 'es' ? 'Filtrar...' : 'Filter...'}
+                            value={currentFilter?.value || ''}
+                            onChange={(e) => handleFilterChange(col.key, e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                            autoFocus
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -17,9 +17,19 @@ type FieldKey = keyof typeof COLUMN_ALIASES;
 const requiredFields: FieldKey[] = ['path', 'type', 'size'];
 const optionalFields: FieldKey[] = ['name', 'extension', 'modified', 'parent', 'depth', 'hash'];
 const metadataFields: FieldKey[] = [
-  'extracted_date', 'date_precision', 'species', 'equipment', 'location', 'zone',
-  'project', 'data_type', 'climate_variable', 'climate_extent', 'camera_id',
-  'sequence_number', 'deforestation_period', 'is_system_file'
+  // Date fields
+  'extracted_date', 'date_precision', 'date_format_hint', 'date_confidence',
+  // Taxonomy
+  'taxa_verbatim', 'taxa_interpreted', 'taxa_rank', 'taxa_kingdom', 'taxa_phylum',
+  'taxa_class', 'taxa_order', 'taxa_family', 'taxa_genus', 'taxa_species',
+  'taxa_common_name', 'taxa_gbif_key', 'taxa_source',
+  // Legacy species
+  'species', 'species_source',
+  // Equipment & Location
+  'equipment', 'location', 'zone', 'project', 'data_type',
+  // Specialized
+  'climate_variable', 'climate_extent', 'camera_id', 'sequence_number',
+  'deforestation_period', 'is_system_file'
 ];
 
 function autoDetectColumn(headers: string[], field: FieldKey): string | null {
@@ -59,15 +69,35 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
       parent: null,
       depth: null,
       hash: null,
-      // Metadata fields
+      // Date fields
       extracted_date: null,
       date_precision: null,
+      date_format_hint: null,
+      date_confidence: null,
+      // Taxonomy
+      taxa_verbatim: null,
+      taxa_interpreted: null,
+      taxa_rank: null,
+      taxa_kingdom: null,
+      taxa_phylum: null,
+      taxa_class: null,
+      taxa_order: null,
+      taxa_family: null,
+      taxa_genus: null,
+      taxa_species: null,
+      taxa_common_name: null,
+      taxa_gbif_key: null,
+      taxa_source: null,
+      // Legacy species
       species: null,
+      species_source: null,
+      // Equipment & Location
       equipment: null,
       location: null,
       zone: null,
       project: null,
       data_type: null,
+      // Specialized
       climate_variable: null,
       climate_extent: null,
       camera_id: null,
@@ -132,15 +162,35 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
       parent: mapping.parent || undefined,
       depth: mapping.depth || undefined,
       hash: mapping.hash || undefined,
-      // Metadata fields
+      // Date fields
       extracted_date: mapping.extracted_date || undefined,
       date_precision: mapping.date_precision || undefined,
+      date_format_hint: mapping.date_format_hint || undefined,
+      date_confidence: mapping.date_confidence || undefined,
+      // Taxonomy
+      taxa_verbatim: mapping.taxa_verbatim || undefined,
+      taxa_interpreted: mapping.taxa_interpreted || undefined,
+      taxa_rank: mapping.taxa_rank || undefined,
+      taxa_kingdom: mapping.taxa_kingdom || undefined,
+      taxa_phylum: mapping.taxa_phylum || undefined,
+      taxa_class: mapping.taxa_class || undefined,
+      taxa_order: mapping.taxa_order || undefined,
+      taxa_family: mapping.taxa_family || undefined,
+      taxa_genus: mapping.taxa_genus || undefined,
+      taxa_species: mapping.taxa_species || undefined,
+      taxa_common_name: mapping.taxa_common_name || undefined,
+      taxa_gbif_key: mapping.taxa_gbif_key || undefined,
+      taxa_source: mapping.taxa_source || undefined,
+      // Legacy species
       species: mapping.species || undefined,
+      species_source: mapping.species_source || undefined,
+      // Equipment & Location
       equipment: mapping.equipment || undefined,
       location: mapping.location || undefined,
       zone: mapping.zone || undefined,
       project: mapping.project || undefined,
       data_type: mapping.data_type || undefined,
+      // Specialized
       climate_variable: mapping.climate_variable || undefined,
       climate_extent: mapping.climate_extent || undefined,
       camera_id: mapping.camera_id || undefined,
@@ -162,15 +212,35 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
     parent: t.parentFolder,
     depth: language === 'es' ? 'Profundidad de Carpeta' : 'Folder Depth',
     hash: language === 'es' ? 'Hash de Contenido' : 'Content Hash',
-    // Metadata fields
+    // Date fields
     extracted_date: language === 'es' ? 'Fecha Extraída' : 'Extracted Date',
     date_precision: language === 'es' ? 'Precisión de Fecha' : 'Date Precision',
+    date_format_hint: language === 'es' ? 'Formato de Fecha' : 'Date Format',
+    date_confidence: language === 'es' ? 'Confianza de Fecha' : 'Date Confidence',
+    // Taxonomy
+    taxa_verbatim: language === 'es' ? 'Taxón (Original)' : 'Taxon (Original)',
+    taxa_interpreted: language === 'es' ? 'Taxón (Interpretado)' : 'Taxon (Interpreted)',
+    taxa_rank: language === 'es' ? 'Rango Taxonómico' : 'Taxonomic Rank',
+    taxa_kingdom: language === 'es' ? 'Reino' : 'Kingdom',
+    taxa_phylum: language === 'es' ? 'Filo' : 'Phylum',
+    taxa_class: language === 'es' ? 'Clase' : 'Class',
+    taxa_order: language === 'es' ? 'Orden' : 'Order',
+    taxa_family: language === 'es' ? 'Familia' : 'Family',
+    taxa_genus: language === 'es' ? 'Género' : 'Genus',
+    taxa_species: language === 'es' ? 'Especie (Epíteto)' : 'Species (Epithet)',
+    taxa_common_name: language === 'es' ? 'Nombre Común' : 'Common Name',
+    taxa_gbif_key: language === 'es' ? 'ID GBIF' : 'GBIF ID',
+    taxa_source: language === 'es' ? 'Fuente del Taxón' : 'Taxon Source',
+    // Legacy species
     species: language === 'es' ? 'Especie' : 'Species',
+    species_source: language === 'es' ? 'Fuente de Especie' : 'Species Source',
+    // Equipment & Location
     equipment: language === 'es' ? 'Equipo' : 'Equipment',
     location: language === 'es' ? 'Ubicación' : 'Location',
     zone: language === 'es' ? 'Zona' : 'Zone',
     project: language === 'es' ? 'Proyecto' : 'Project',
     data_type: language === 'es' ? 'Tipo de Datos' : 'Data Type',
+    // Specialized
     climate_variable: language === 'es' ? 'Variable Climática' : 'Climate Variable',
     climate_extent: language === 'es' ? 'Extensión Climática' : 'Climate Extent',
     camera_id: language === 'es' ? 'ID de Cámara' : 'Camera ID',
