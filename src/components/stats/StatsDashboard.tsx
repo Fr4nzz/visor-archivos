@@ -1,8 +1,6 @@
 import { useState, useMemo } from 'react';
 import { File, Folder, Database, PieChart, TrendingUp, BarChart3 } from 'lucide-react';
 import {
-  PieChart as RechartsPieChart,
-  Pie,
   Cell,
   BarChart,
   Bar,
@@ -16,6 +14,8 @@ import {
   ComposedChart,
   Line,
   ReferenceLine,
+  PieChart as RechartsPieChart,
+  Pie,
 } from 'recharts';
 import { useInventoryStore } from '../../stores/inventoryStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -24,7 +24,6 @@ import { getColorByExtension, getColorBySpecies, getColorByProject } from '../..
 import { translations } from '../../utils/translations';
 import type { TaxonomyLevel } from '../../types/inventory';
 
-type PieChartMode = 'size' | 'count';
 type ProjectionModel = 'linear' | 'logistic';
 
 // Taxonomy level labels for dropdown
@@ -93,7 +92,6 @@ export function StatsDashboard() {
   const { stats, entries } = useInventoryStore();
   const { language } = useUIStore();
   const t = translations[language];
-  const [pieChartMode, setPieChartMode] = useState<PieChartMode>('size');
   const [taxonomyLevel, setTaxonomyLevel] = useState<TaxonomyLevel>('species');
   const [showProjection, setShowProjection] = useState(false);
   const [projectionModel, setProjectionModel] = useState<ProjectionModel>('linear');
@@ -264,25 +262,6 @@ export function StatsDashboard() {
       </div>
     );
   }
-
-  // Prepare pie chart data (top 10 extensions by size or count)
-  const pieData = pieChartMode === 'size'
-    ? Object.entries(stats.sizeByExtension)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
-        .map(([ext, size]) => ({
-          name: ext,
-          value: size,
-          color: getColorByExtension(ext),
-        }))
-    : Object.entries(stats.extensionCounts)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
-        .map(([ext, count]) => ({
-          name: ext,
-          value: count,
-          color: getColorByExtension(ext),
-        }));
 
   // Prepare bar chart data (size distribution)
   const barData = stats.sizeDistribution.map((bucket) => ({
@@ -539,85 +518,166 @@ export function StatsDashboard() {
         )}
       </div>
 
-      {/* Charts Row */}
+      {/* Charts Row - File Types */}
       <div className="grid grid-cols-2 gap-6 mb-6">
-        {/* File Type Pie Chart */}
+        {/* Files by Type - Bar Chart with Others grouping */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {pieChartMode === 'size' ? t.storageByFileType : t.filesByType}
-            </h3>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setPieChartMode('size')}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                  pieChartMode === 'size'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {t.bySize}
-              </button>
-              <button
-                onClick={() => setPieChartMode('count')}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                  pieChartMode === 'count'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {t.byCount}
-              </button>
-            </div>
-          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {language === 'es' ? 'Archivos por Tipo' : 'Files by Type'}
+          </h3>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <RechartsPieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) =>
-                    percent && percent > 0.05 ? `${name || ''} (${(percent * 100).toFixed(0)}%)` : ''
-                  }
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value) =>
-                    pieChartMode === 'size'
-                      ? formatSize(Number(value))
-                      : `${formatNumber(Number(value))} ${t.files}`
-                  }
-                />
-              </RechartsPieChart>
-            </ResponsiveContainer>
+            {(() => {
+              // Group small categories (<2%) into "Others"
+              const total = Object.values(stats.extensionCounts).reduce((a, b) => a + b, 0);
+              const threshold = total * 0.02;
+              const entries = Object.entries(stats.extensionCounts).sort(([, a], [, b]) => b - a);
+
+              let othersCount = 0;
+              const mainTypes: { name: string; count: number; color: string }[] = [];
+
+              for (const [ext, count] of entries) {
+                if (count >= threshold && mainTypes.length < 10) {
+                  mainTypes.push({ name: ext, count, color: getColorByExtension(ext) });
+                } else {
+                  othersCount += count;
+                }
+              }
+
+              if (othersCount > 0) {
+                mainTypes.push({
+                  name: language === 'es' ? 'Otros' : 'Others',
+                  count: othersCount,
+                  color: '#9CA3AF'
+                });
+              }
+
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={mainTypes}
+                    layout="vertical"
+                    margin={{ top: 5, right: 80, left: 60, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" tickFormatter={(v) => formatNumber(v)} tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={50} />
+                    <Tooltip formatter={(value) => [formatNumber(value as number), language === 'es' ? 'Archivos' : 'Files']} />
+                    <Bar
+                      dataKey="count"
+                      radius={[0, 4, 4, 0]}
+                      label={{
+                        position: 'right',
+                        formatter: (value) => formatNumber(value as number),
+                        fontSize: 10,
+                        fill: '#374151',
+                      }}
+                    >
+                      {mainTypes.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </div>
         </div>
 
-        {/* Size Distribution Bar Chart */}
+        {/* Storage by Type - Bar Chart with Others grouping */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.fileSizeDistribution}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {language === 'es' ? 'Almacenamiento por Tipo' : 'Storage by Type'}
+          </h3>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => formatNumber(v)} />
-                <Tooltip
-                  formatter={(value, name) =>
-                    name === 'count' ? formatNumber(Number(value)) : formatSize(Number(value))
-                  }
-                />
-                <Bar dataKey="count" fill="#3B82F6" name={t.fileCount} />
-              </BarChart>
-            </ResponsiveContainer>
+            {(() => {
+              // Group small categories (<2%) into "Others"
+              const total = Object.values(stats.sizeByExtension).reduce((a, b) => a + b, 0);
+              const threshold = total * 0.02;
+              const entries = Object.entries(stats.sizeByExtension).sort(([, a], [, b]) => b - a);
+
+              let othersSize = 0;
+              const mainTypes: { name: string; size: number; sizeDisplay: number; color: string }[] = [];
+
+              for (const [ext, size] of entries) {
+                if (size >= threshold && mainTypes.length < 10) {
+                  mainTypes.push({
+                    name: ext,
+                    size,
+                    sizeDisplay: size / (1024 * 1024 * 1024), // GB
+                    color: getColorByExtension(ext)
+                  });
+                } else {
+                  othersSize += size;
+                }
+              }
+
+              if (othersSize > 0) {
+                mainTypes.push({
+                  name: language === 'es' ? 'Otros' : 'Others',
+                  size: othersSize,
+                  sizeDisplay: othersSize / (1024 * 1024 * 1024),
+                  color: '#9CA3AF'
+                });
+              }
+
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={mainTypes}
+                    layout="vertical"
+                    margin={{ top: 5, right: 80, left: 60, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" tickFormatter={(v) => `${v.toFixed(0)} GB`} tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={50} />
+                    <Tooltip formatter={(_value, _name, props) => [formatSize(props.payload.size), language === 'es' ? 'Tamaño' : 'Size']} />
+                    <Bar
+                      dataKey="sizeDisplay"
+                      radius={[0, 4, 4, 0]}
+                      label={{
+                        position: 'right',
+                        formatter: (value) => `${(value as number).toFixed(1)} GB`,
+                        fontSize: 10,
+                        fill: '#374151',
+                      }}
+                    >
+                      {mainTypes.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </div>
+        </div>
+      </div>
+
+      {/* Size Distribution - full width */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.fileSizeDistribution}</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={barData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+              <YAxis tickFormatter={(v) => formatNumber(v)} tick={{ fontSize: 10 }} />
+              <Tooltip
+                formatter={(value) => [formatNumber(Number(value)), language === 'es' ? 'Archivos' : 'Files']}
+              />
+              <Bar
+                dataKey="count"
+                fill="#3B82F6"
+                name={t.fileCount}
+                label={{
+                  position: 'top',
+                  formatter: (value) => (value as number) > 0 ? formatNumber(value as number) : '',
+                  fontSize: 9,
+                  fill: '#374151',
+                }}
+              />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
