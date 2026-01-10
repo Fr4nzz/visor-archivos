@@ -25,7 +25,7 @@ import { translations } from '../../utils/translations';
 import type { TaxonomyLevel } from '../../types/inventory';
 
 type PieChartMode = 'size' | 'count';
-type ProjectionModel = 'linear' | 'exponential' | 'polynomial';
+type ProjectionModel = 'linear' | 'logistic';
 
 // Taxonomy level labels for dropdown
 const TAXONOMY_LABELS: Record<TaxonomyLevel, { en: string; es: string }> = {
@@ -40,8 +40,7 @@ const TAXONOMY_LABELS: Record<TaxonomyLevel, { en: string; es: string }> = {
 
 const MODEL_LABELS: Record<ProjectionModel, { en: string; es: string }> = {
   linear: { en: 'Linear', es: 'Lineal' },
-  exponential: { en: 'Exponential', es: 'Exponencial' },
-  polynomial: { en: 'Polynomial (2°)', es: 'Polinomial (2°)' },
+  logistic: { en: 'Logistic', es: 'Logístico' },
 };
 
 interface SummaryCardProps {
@@ -82,51 +81,12 @@ function linearRegression(data: { x: number; y: number }[]): { slope: number; in
   return { slope: isNaN(slope) ? 0 : slope, intercept: isNaN(intercept) ? 0 : intercept };
 }
 
-function exponentialRegression(data: { x: number; y: number }[]): { a: number; b: number } {
-  // Transform to linear: ln(y) = ln(a) + b*x
-  const logData = data.filter(p => p.y > 0).map(p => ({ x: p.x, y: Math.log(p.y) }));
-  if (logData.length < 2) return { a: 1, b: 0 };
-
-  const { slope, intercept } = linearRegression(logData);
-  return { a: Math.exp(intercept), b: slope };
-}
-
-function polynomialRegression(data: { x: number; y: number }[]): { a: number; b: number; c: number } {
-  // Quadratic fit: y = ax² + bx + c
-  const n = data.length;
-  if (n < 3) {
-    const { slope, intercept } = linearRegression(data);
-    return { a: 0, b: slope, c: intercept };
-  }
-
-  // Using least squares for degree 2
-  let sumX = 0, sumX2 = 0, sumX3 = 0, sumX4 = 0;
-  let sumY = 0, sumXY = 0, sumX2Y = 0;
-
-  for (const p of data) {
-    const x = p.x, y = p.y;
-    sumX += x;
-    sumX2 += x * x;
-    sumX3 += x * x * x;
-    sumX4 += x * x * x * x;
-    sumY += y;
-    sumXY += x * y;
-    sumX2Y += x * x * y;
-  }
-
-  // Solve system of equations using Cramer's rule
-  const det = n * (sumX2 * sumX4 - sumX3 * sumX3) - sumX * (sumX * sumX4 - sumX2 * sumX3) + sumX2 * (sumX * sumX3 - sumX2 * sumX2);
-
-  if (Math.abs(det) < 1e-10) {
-    const { slope, intercept } = linearRegression(data);
-    return { a: 0, b: slope, c: intercept };
-  }
-
-  const a = (sumY * (sumX2 * sumX4 - sumX3 * sumX3) - sumX * (sumXY * sumX4 - sumX2Y * sumX3) + sumX2 * (sumXY * sumX3 - sumX2Y * sumX2)) / det;
-  const b = (n * (sumXY * sumX4 - sumX2Y * sumX3) - sumY * (sumX * sumX4 - sumX2 * sumX3) + sumX2 * (sumX * sumX2Y - sumX2 * sumXY)) / det;
-  const c = (n * (sumX2 * sumX2Y - sumX3 * sumXY) - sumX * (sumX * sumX2Y - sumX2 * sumXY) + sumY * (sumX * sumX3 - sumX2 * sumX2)) / det;
-
-  return { a: isNaN(a) ? 0 : a, b: isNaN(b) ? 0 : b, c: isNaN(c) ? 0 : c };
+// Logistic growth: P(t) = K / (1 + ((K - P0) / P0) * e^(-r*t))
+// K = carrying capacity, P0 = initial value, r = growth rate
+function logisticGrowth(currentValue: number, growthRate: number, carryingCapacity: number, t: number): number {
+  if (currentValue <= 0 || carryingCapacity <= currentValue) return currentValue;
+  const A = (carryingCapacity - currentValue) / currentValue;
+  return carryingCapacity / (1 + A * Math.exp(-growthRate * t));
 }
 
 export function StatsDashboard() {
@@ -214,11 +174,8 @@ export function StatsDashboard() {
     const currentYear = new Date().getFullYear();
     const projectionYears = 10;
 
-    // For linear model, use only last 5 years (2020+)
-    const trainingData = projectionModel === 'linear'
-      ? historicalData.filter(d => d.year >= 2020)
-      : historicalData;
-
+    // Use only last 5 years (2020+) for prediction - better reflects current operational capacity
+    const trainingData = historicalData.filter(d => d.year >= 2020);
     if (trainingData.length < 2) return [];
 
     // Normalize x values for better numerical stability
@@ -226,33 +183,25 @@ export function StatsDashboard() {
     const points = trainingData.map(d => ({ x: d.year - baseYear, y: d.sizeTB }));
 
     // The user mentioned starting storage for projection is 2.59 TB (for data without dates)
-    // So we adjust the last known value
-    const lastHistorical = historicalData[historicalData.length - 1];
-    const adjustedStartTB = Math.max(lastHistorical?.sizeTB || 0, 2.59);
+    const adjustedStartTB = 2.59;
+
+    // Calculate linear growth rate from recent data
+    const { slope } = linearRegression(points);
+    const annualGrowthTB = Math.max(slope, 0.1); // Minimum 0.1 TB/year
 
     // Calculate model parameters
     let predict: (year: number) => number;
 
     if (projectionModel === 'linear') {
-      const { slope } = linearRegression(points);
-      // Adjust intercept to match current data
-      const adjustedIntercept = adjustedStartTB - slope * (currentYear - baseYear);
-      predict = (year: number) => Math.max(0, slope * (year - baseYear) + adjustedIntercept);
-    } else if (projectionModel === 'exponential') {
-      const { a, b } = exponentialRegression(points);
-      // Adjust to match current value
-      const currentPredicted = a * Math.exp(b * (currentYear - baseYear));
-      const factor = currentPredicted > 0 ? adjustedStartTB / currentPredicted : 1;
-      predict = (year: number) => Math.max(0, factor * a * Math.exp(b * (year - baseYear)));
+      // Linear: constant annual growth
+      predict = (year: number) => adjustedStartTB + annualGrowthTB * (year - currentYear);
     } else {
-      const { a, b, c } = polynomialRegression(points);
-      // Adjust to match current value
-      const currentPredicted = a * Math.pow(currentYear - baseYear, 2) + b * (currentYear - baseYear) + c;
-      const offset = adjustedStartTB - currentPredicted;
-      predict = (year: number) => {
-        const x = year - baseYear;
-        return Math.max(0, a * x * x + b * x + c + offset);
-      };
+      // Logistic: S-curve with carrying capacity
+      // Set carrying capacity to ~2.5x current data over 10 years (reasonable estimate)
+      const carryingCapacity = adjustedStartTB + annualGrowthTB * 10 * 2.5;
+      // Estimate growth rate from recent slope
+      const r = annualGrowthTB / adjustedStartTB;
+      predict = (year: number) => logisticGrowth(adjustedStartTB, r, carryingCapacity, year - currentYear);
     }
 
     // Generate projection points
@@ -355,16 +304,6 @@ export function StatsDashboard() {
         }))
     : [];
 
-  // Prepare largest files bar data
-  const largestFilesBarData = stats.largestFiles.slice(0, 15).map((file) => ({
-    name: file.name.length > 25 ? file.name.substring(0, 22) + '...' : file.name,
-    fullName: file.name,
-    size: file.size,
-    sizeGB: file.size / (1024 * 1024 * 1024),
-    extension: file.extension,
-    color: getColorByExtension(file.extension || 'unknown'),
-  }));
-
   // Prepare largest folders bar data
   const largestFoldersBarData = stats.largestFolders.slice(0, 15).map((folder) => ({
     name: folder.name.length > 25 ? folder.name.substring(0, 22) + '...' : folder.name,
@@ -405,171 +344,200 @@ export function StatsDashboard() {
         />
       </div>
 
-      {/* Historical Data Collection Growth Chart */}
-      {historicalData.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-gray-900">
-                {showProjection
-                  ? (language === 'es' ? 'Proyección de Almacenamiento a 10 Años' : '10-Year Storage Projection')
-                  : (language === 'es' ? 'Crecimiento Histórico de Datos' : 'Historical Data Collection Growth')}
+      {/* Historical Data + Storage by Project Row */}
+      <div className="grid grid-cols-2 gap-6 mb-6">
+        {/* Historical Data Collection Growth Chart */}
+        {historicalData.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">
+                  {language === 'es' ? 'Crecimiento Histórico' : 'Historical Growth'}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showProjection}
+                    onChange={(e) => setShowProjection(e.target.checked)}
+                    className="w-3 h-3 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-600">
+                    {language === 'es' ? 'Proyección' : 'Projection'}
+                  </span>
+                </label>
+                {showProjection && (
+                  <select
+                    value={projectionModel}
+                    onChange={(e) => setProjectionModel(e.target.value as ProjectionModel)}
+                    className="px-2 py-0.5 text-xs border border-gray-300 rounded bg-white"
+                  >
+                    {(Object.keys(MODEL_LABELS) as ProjectionModel[]).map((model) => (
+                      <option key={model} value={model}>
+                        {language === 'es' ? MODEL_LABELS[model].es : MODEL_LABELS[model].en}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={growthChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis
+                    dataKey="year"
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v) => v.toString()}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => `${v.toFixed(1)} TB`}
+                    tick={{ fontSize: 10 }}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => {
+                      const label = name === 'historical'
+                        ? (language === 'es' ? 'Histórico' : 'Historical')
+                        : name === 'projected'
+                        ? (language === 'es' ? 'Proyectado' : 'Projected')
+                        : String(name || '');
+                      return [`${(value as number)?.toFixed(2) || 0} TB`, label];
+                    }}
+                    labelFormatter={(label) => `${language === 'es' ? 'Año' : 'Year'}: ${label}`}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 10 }}
+                    formatter={(value) => {
+                      if (value === 'historical') return language === 'es' ? 'Histórico' : 'Historical';
+                      if (value === 'projected') return language === 'es' ? 'Proyectado' : 'Projected';
+                      if (value === 'projectionRange') return '±20%';
+                      return value;
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="historical"
+                    fill="#93C5FD"
+                    stroke="#3B82F6"
+                    strokeWidth={2}
+                    fillOpacity={0.6}
+                    name="historical"
+                    dot={{ fill: '#3B82F6', r: 2 }}
+                    connectNulls={false}
+                  />
+                  {showProjection && (
+                    <Area
+                      type="monotone"
+                      dataKey="projectedHigh"
+                      fill="#F9A8D4"
+                      stroke="none"
+                      fillOpacity={0.3}
+                      name="projectionRange"
+                      connectNulls={false}
+                    />
+                  )}
+                  {showProjection && (
+                    <Area
+                      type="monotone"
+                      dataKey="projectedLow"
+                      fill="#FFFFFF"
+                      stroke="none"
+                      fillOpacity={1}
+                      connectNulls={false}
+                      legendType="none"
+                    />
+                  )}
+                  {showProjection && (
+                    <Line
+                      type="monotone"
+                      dataKey="projected"
+                      stroke="#9D174D"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={{ fill: '#9D174D', r: 2 }}
+                      name="projected"
+                      connectNulls={false}
+                    />
+                  )}
+                  <ReferenceLine
+                    x={new Date().getFullYear()}
+                    stroke="#6B7280"
+                    strokeDasharray="3 3"
+                    label={{ value: language === 'es' ? 'Hoy' : 'Today', position: 'top', fontSize: 9, fill: '#6B7280' }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {showProjection && projectionData.length > 0 && (
+              <div className="mt-2 p-2 bg-pink-50 rounded border border-pink-200">
+                <p className="text-xs text-pink-800">
+                  <strong>{language === 'es' ? '10 años' : '10 yr'}:</strong>{' '}
+                  {finalProjection.toFixed(1)} TB ({(finalProjection * 0.8).toFixed(1)} - {(finalProjection * 1.2).toFixed(1)})
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Storage by Project - Horizontal Bar Chart */}
+        {projectBarData.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="w-4 h-4 text-blue-600" />
+              <h3 className="text-base font-semibold text-gray-900">
+                {language === 'es' ? 'Almacenamiento por Proyecto' : 'Storage by Project'}
               </h3>
             </div>
-            <div className="flex items-center gap-4">
-              {/* Show Projection Toggle */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showProjection}
-                  onChange={(e) => setShowProjection(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-600">
-                  {language === 'es' ? 'Mostrar proyección' : 'Show projection'}
-                </span>
-              </label>
-
-              {/* Model Selection */}
-              {showProjection && (
-                <select
-                  value={projectionModel}
-                  onChange={(e) => setProjectionModel(e.target.value as ProjectionModel)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500"
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={projectBarData.slice(0, 8)}
+                  layout="vertical"
+                  margin={{ top: 5, right: 60, left: 100, bottom: 5 }}
                 >
-                  {(Object.keys(MODEL_LABELS) as ProjectionModel[]).map((model) => (
-                    <option key={model} value={model}>
-                      {language === 'es' ? MODEL_LABELS[model].es : MODEL_LABELS[model].en}
-                    </option>
-                  ))}
-                </select>
-              )}
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <XAxis
+                    type="number"
+                    tickFormatter={(v) => `${(v).toFixed(0)} GB`}
+                    tick={{ fontSize: 10 }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fontSize: 10 }}
+                    width={90}
+                  />
+                  <Tooltip
+                    formatter={(value) => [formatSize((value as number) * 1024 * 1024 * 1024), language === 'es' ? 'Tamaño' : 'Size']}
+                  />
+                  <Bar
+                    dataKey="sizeGB"
+                    fill="#3B82F6"
+                    radius={[0, 4, 4, 0]}
+                    label={{
+                      position: 'right',
+                      formatter: (value) => `${(value as number).toFixed(0)} GB`,
+                      fontSize: 9,
+                      fill: '#374151',
+                    }}
+                  >
+                    {projectBarData.slice(0, 8).map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.name === (language === 'es' ? 'Sin asignar' : 'Unassigned') ? '#9CA3AF' : '#3B82F6'}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
-
-          <div className="h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={growthChartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis
-                  dataKey="year"
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(v) => v.toString()}
-                />
-                <YAxis
-                  tickFormatter={(v) => `${v.toFixed(1)} TB`}
-                  tick={{ fontSize: 12 }}
-                  label={{
-                    value: language === 'es' ? 'Almacenamiento (TB)' : 'Cumulative Storage (TB)',
-                    angle: -90,
-                    position: 'insideLeft',
-                    style: { textAnchor: 'middle', fontSize: 12 }
-                  }}
-                />
-                <Tooltip
-                  formatter={(value, name) => {
-                    const label = name === 'historical'
-                      ? (language === 'es' ? 'Histórico' : 'Historical')
-                      : name === 'projected'
-                      ? (language === 'es' ? 'Proyectado' : 'Projected')
-                      : String(name || '');
-                    return [`${(value as number)?.toFixed(2) || 0} TB`, label];
-                  }}
-                  labelFormatter={(label) => `${language === 'es' ? 'Año' : 'Year'}: ${label}`}
-                />
-                <Legend
-                  formatter={(value) => {
-                    if (value === 'historical') return language === 'es' ? 'Datos Históricos' : 'Historical Data';
-                    if (value === 'projected') return language === 'es' ? 'Crecimiento Proyectado' : 'Projected Growth';
-                    if (value === 'projectionRange') return language === 'es' ? 'Rango (±20%)' : 'Range (±20%)';
-                    return value;
-                  }}
-                />
-
-                {/* Historical area */}
-                <Area
-                  type="monotone"
-                  dataKey="historical"
-                  fill="#93C5FD"
-                  stroke="#3B82F6"
-                  strokeWidth={2}
-                  fillOpacity={0.6}
-                  name="historical"
-                  dot={{ fill: '#3B82F6', strokeWidth: 2 }}
-                  connectNulls={false}
-                />
-
-                {/* Projection range area */}
-                {showProjection && (
-                  <Area
-                    type="monotone"
-                    dataKey="projectedHigh"
-                    fill="#F9A8D4"
-                    stroke="none"
-                    fillOpacity={0.3}
-                    name="projectionRange"
-                    connectNulls={false}
-                  />
-                )}
-                {showProjection && (
-                  <Area
-                    type="monotone"
-                    dataKey="projectedLow"
-                    fill="#FFFFFF"
-                    stroke="none"
-                    fillOpacity={1}
-                    connectNulls={false}
-                    legendType="none"
-                  />
-                )}
-
-                {/* Projection line */}
-                {showProjection && (
-                  <Line
-                    type="monotone"
-                    dataKey="projected"
-                    stroke="#9D174D"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={{ fill: '#9D174D', strokeWidth: 2 }}
-                    name="projected"
-                    connectNulls={false}
-                  />
-                )}
-
-                {/* Current year reference line */}
-                <ReferenceLine
-                  x={new Date().getFullYear()}
-                  stroke="#6B7280"
-                  strokeDasharray="3 3"
-                  label={{
-                    value: language === 'es' ? 'Hoy' : 'Today',
-                    position: 'top',
-                    fontSize: 11,
-                    fill: '#6B7280'
-                  }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Projection summary */}
-          {showProjection && projectionData.length > 0 && (
-            <div className="mt-4 p-3 bg-pink-50 rounded-lg border border-pink-200">
-              <p className="text-sm text-pink-800">
-                <strong>{language === 'es' ? 'Proyección a 10 años' : '10-year projection'}:</strong>{' '}
-                {finalProjection.toFixed(1)} TB ({language === 'es' ? 'rango' : 'range'}: {(finalProjection * 0.8).toFixed(1)} - {(finalProjection * 1.2).toFixed(1)} TB)
-                {projectionModel === 'linear' && (
-                  <span className="text-pink-600 ml-2">
-                    ({language === 'es' ? 'basado en datos desde 2020' : 'based on data from 2020'})
-                  </span>
-                )}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-2 gap-6 mb-6">
@@ -653,100 +621,37 @@ export function StatsDashboard() {
         </div>
       </div>
 
-      {/* Storage by Project - Horizontal Bar Chart */}
-      {projectBarData.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <BarChart3 className="w-5 h-5 text-blue-600" />
-            <h3 className="text-lg font-semibold text-gray-900">
-              {language === 'es' ? 'Almacenamiento por Proyecto' : 'Storage by Research Project'}
-            </h3>
-          </div>
-          <div style={{ height: Math.max(300, projectBarData.length * 45) }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={projectBarData}
-                layout="vertical"
-                margin={{ top: 5, right: 80, left: 150, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                <XAxis
-                  type="number"
-                  tickFormatter={(v) => `${(v).toFixed(0)} GB`}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fontSize: 12 }}
-                  width={140}
-                />
-                <Tooltip
-                  formatter={(value) => [formatSize((value as number) * 1024 * 1024 * 1024), language === 'es' ? 'Tamaño' : 'Size']}
-                  labelStyle={{ fontWeight: 'bold' }}
-                />
-                <Bar
-                  dataKey="sizeGB"
-                  fill="#3B82F6"
-                  radius={[0, 4, 4, 0]}
-                  label={{
-                    position: 'right',
-                    formatter: (value) => `${(value as number).toFixed(1)} GB`,
-                    fontSize: 11,
-                    fill: '#374151',
-                  }}
-                >
-                  {projectBarData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.name === (language === 'es' ? 'Sin asignar' : 'Unassigned') ? '#9CA3AF' : '#3B82F6'}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Top Lists as Bar Charts */}
+      {/* Top Lists */}
       <div className="grid grid-cols-2 gap-6 mb-6">
-        {/* Largest Files - Horizontal Bar Chart */}
+        {/* Largest Files - List View */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.largestFiles}</h3>
-          <div className="h-[500px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={largestFilesBarData}
-                layout="vertical"
-                margin={{ top: 5, right: 60, left: 120, bottom: 5 }}
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {stats.largestFiles.slice(0, 15).map((file, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-2 rounded hover:bg-gray-50 border-b border-gray-100 last:border-0"
               >
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                <XAxis
-                  type="number"
-                  tickFormatter={(v) => formatSize(v)}
-                  tick={{ fontSize: 10 }}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fontSize: 10 }}
-                  width={110}
-                />
-                <Tooltip
-                  formatter={(value) => [formatSize(value as number), language === 'es' ? 'Tamaño' : 'Size']}
-                  labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label}
-                />
-                <Bar
-                  dataKey="size"
-                  radius={[0, 4, 4, 0]}
-                >
-                  {largestFilesBarData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-sm font-medium text-gray-400 w-5">{index + 1}</span>
+                  <div
+                    className="w-3 h-3 rounded flex-shrink-0"
+                    style={{ backgroundColor: getColorByExtension(file.extension || 'unknown') }}
+                  />
+                  <span className="text-sm text-gray-700 truncate" title={file.name}>
+                    {file.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-100 rounded">
+                    {file.extension || 'unknown'}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 w-20 text-right">
+                    {formatSize(file.size)}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -938,62 +843,36 @@ export function StatsDashboard() {
         </>
       )}
 
-      {/* Extension breakdown - Horizontal Bar Chart */}
+      {/* Extension breakdown - List View */}
       <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.allFileTypes}</h3>
-        <div className="h-[600px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={Object.entries(stats.sizeByExtension)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 20)
-                .map(([ext, size]) => ({
-                  name: ext,
-                  size,
-                  sizeGB: size / (1024 * 1024 * 1024),
-                  count: stats.extensionCounts[ext] || 0,
-                  color: getColorByExtension(ext),
-                }))}
-              layout="vertical"
-              margin={{ top: 5, right: 80, left: 80, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-              <XAxis
-                type="number"
-                tickFormatter={(v) => `${v.toFixed(0)} GB`}
-                tick={{ fontSize: 11 }}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                tick={{ fontSize: 11 }}
-                width={70}
-              />
-              <Tooltip
-                formatter={(value, name) => {
-                  if (name === 'sizeGB') return [`${(value as number).toFixed(2)} GB`, language === 'es' ? 'Tamaño' : 'Size'];
-                  return [formatNumber(value as number), language === 'es' ? 'Archivos' : 'Files'];
-                }}
-              />
-              <Bar
-                dataKey="sizeGB"
-                radius={[0, 4, 4, 0]}
-                label={{
-                  position: 'right',
-                  formatter: (value) => `${(value as number).toFixed(1)} GB`,
-                  fontSize: 10,
-                  fill: '#374151',
-                }}
+        <div className="grid grid-cols-2 gap-4 max-h-[500px] overflow-y-auto">
+          {Object.entries(stats.sizeByExtension)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 30)
+            .map(([ext, size], index) => (
+              <div
+                key={ext}
+                className="flex items-center justify-between p-2 rounded hover:bg-gray-50 border border-gray-100"
               >
-                {Object.entries(stats.sizeByExtension)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 20)
-                  .map(([ext], index) => (
-                    <Cell key={`cell-${index}`} fill={getColorByExtension(ext)} />
-                  ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-400 w-5">{index + 1}</span>
+                  <div
+                    className="w-3 h-3 rounded flex-shrink-0"
+                    style={{ backgroundColor: getColorByExtension(ext) }}
+                  />
+                  <span className="text-sm font-medium text-gray-700">{ext}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">
+                    {formatNumber(stats.extensionCounts[ext] || 0)} {t.files}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 w-20 text-right">
+                    {formatSize(size)}
+                  </span>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
     </div>
