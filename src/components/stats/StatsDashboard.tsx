@@ -95,6 +95,8 @@ export function StatsDashboard() {
   const [taxonomyLevel, setTaxonomyLevel] = useState<TaxonomyLevel>('species');
   const [showProjection, setShowProjection] = useState(true);
   const [projectionModel, setProjectionModel] = useState<ProjectionModel>('linear');
+  const [ignoreDuplicates, setIgnoreDuplicates] = useState(false);
+  const [duplicatesDisplayCount, setDuplicatesDisplayCount] = useState(20);
 
   // Extract year from date string, handling various formats including year-only
   const extractYear = (dateStr: string | null | undefined): number | null => {
@@ -358,20 +360,29 @@ export function StatsDashboard() {
     ? projectionData[projectionData.length - 1].projectedFiles
     : 0;
 
+  // Calculate adjusted stats when ignoring duplicates
+  const displayTotalFiles = ignoreDuplicates && stats.deduplication
+    ? stats.totalFiles - stats.deduplication.duplicateFileCount
+    : stats.totalFiles;
+  const displayTotalSize = ignoreDuplicates && stats.deduplication
+    ? stats.deduplication.uniqueSize
+    : stats.totalSize;
+
   return (
     <div className="h-full overflow-auto p-6 bg-gray-50">
       {/* Summary Cards */}
       <div className="grid grid-cols-5 gap-4 mb-6">
         <SummaryCard
           title={t.totalFiles}
-          value={formatNumber(stats.totalFiles)}
+          value={formatNumber(displayTotalFiles)}
           icon={<File className="w-6 h-6" />}
+          subtitle={ignoreDuplicates && stats.deduplication ? `${language === 'es' ? 'sin duplicados' : 'deduplicated'}` : undefined}
         />
         <SummaryCard
           title={t.totalSize}
-          value={formatSize(stats.totalSize)}
+          value={formatSize(displayTotalSize)}
           icon={<Database className="w-6 h-6" />}
-          subtitle={stats.deduplication ? `${formatSize(stats.deduplication.uniqueSize)} ${language === 'es' ? 'únicos' : 'unique'}` : undefined}
+          subtitle={!ignoreDuplicates && stats.deduplication ? `${formatSize(stats.deduplication.uniqueSize)} ${language === 'es' ? 'únicos' : 'unique'}` : undefined}
         />
         <SummaryCard
           title={t.foldersLabel}
@@ -384,12 +395,28 @@ export function StatsDashboard() {
           icon={<PieChart className="w-6 h-6" />}
         />
         {stats.deduplication && (
-          <SummaryCard
-            title={language === 'es' ? 'Duplicados' : 'Duplicates'}
-            value={`${stats.deduplication.duplicatePercent.toFixed(1)}%`}
-            icon={<Copy className="w-6 h-6" />}
-            subtitle={`${formatSize(stats.deduplication.duplicateSize)} ${language === 'es' ? 'desperdiciados' : 'wasted'}`}
-          />
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                <Copy className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-gray-500">{language === 'es' ? 'Duplicados' : 'Duplicates'}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.deduplication.duplicatePercent.toFixed(1)}%</p>
+                <label className="flex items-center gap-1.5 mt-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ignoreDuplicates}
+                    onChange={(e) => setIgnoreDuplicates(e.target.checked)}
+                    className="w-3 h-3 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500">
+                    {language === 'es' ? 'Ignorar duplicados' : 'Ignore duplicates'}
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -731,6 +758,34 @@ export function StatsDashboard() {
             </div>
           </div>
         )}
+
+        {/* Size Distribution */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">{t.fileSizeDistribution}</h3>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={barData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={(v) => formatNumber(v)} tick={{ fontSize: 10 }} />
+                <Tooltip
+                  formatter={(value) => [formatNumber(Number(value)), language === 'es' ? 'Archivos' : 'Files']}
+                />
+                <Bar
+                  dataKey="count"
+                  fill="#10B981"
+                  name={t.fileCount}
+                  label={{
+                    position: 'top',
+                    formatter: (value) => (value as number) > 0 ? formatNumber(value as number) : '',
+                    fontSize: 9,
+                    fill: '#374151',
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* Deduplication Analysis Section */}
@@ -762,37 +817,60 @@ export function StatsDashboard() {
             </div>
           </div>
 
-          <h4 className="text-sm font-medium text-gray-700 mb-2">
-            {language === 'es' ? 'Principales Grupos de Duplicados por Almacenamiento Desperdiciado' : 'Top Duplicate Groups by Wasted Storage'}
-          </h4>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {stats.deduplication.topDuplicates.slice(0, 10).map((dup, index) => (
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-gray-700">
+              {language === 'es' ? 'Grupos de Duplicados por Almacenamiento Desperdiciado' : 'Duplicate Groups by Wasted Storage'}
+            </h4>
+            <span className="text-xs text-gray-500">
+              {language === 'es' ? `Mostrando ${Math.min(duplicatesDisplayCount, stats.deduplication.topDuplicates.length)} de ${stats.deduplication.duplicateGroups} grupos` : `Showing ${Math.min(duplicatesDisplayCount, stats.deduplication.topDuplicates.length)} of ${stats.deduplication.duplicateGroups} groups`}
+            </span>
+          </div>
+          <div className="space-y-3 max-h-[500px] overflow-y-auto border border-gray-100 rounded-lg p-2">
+            {stats.deduplication.topDuplicates.slice(0, duplicatesDisplayCount).map((dup, index) => (
               <div
                 key={dup.hash}
-                className="flex items-center justify-between p-2 rounded hover:bg-gray-50 border border-gray-100"
+                className="p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
               >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className="text-sm font-medium text-gray-400 w-5">{index + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-900 truncate" title={dup.sampleName}>
-                      {dup.sampleName}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate" title={dup.samplePath}>
-                      {dup.samplePath}
-                    </p>
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-400">#{index + 1}</span>
+                    <span className="text-sm font-medium text-gray-900">{dup.sampleName}</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
+                      {dup.copyCount} {language === 'es' ? 'copias' : 'copies'}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded">
+                      {formatSize(dup.fileSize)} {language === 'es' ? 'c/u' : 'each'}
+                    </span>
+                    <span className="text-sm font-semibold text-red-600">
+                      {formatSize(dup.wastedBytes)} {language === 'es' ? 'desperdiciados' : 'wasted'}
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 flex-shrink-0">
-                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
-                    {dup.copyCount} {language === 'es' ? 'copias' : 'copies'}
-                  </span>
-                  <span className="text-sm font-medium text-red-600 w-24 text-right">
-                    {formatSize(dup.wastedBytes)} {language === 'es' ? 'desp.' : 'wasted'}
-                  </span>
+                <div className="text-xs text-gray-500 space-y-0.5 pl-6">
+                  {dup.files.slice(0, 5).map((file, fileIndex) => (
+                    <p key={fileIndex} className="truncate" title={file.path}>
+                      {file.path}
+                    </p>
+                  ))}
+                  {dup.files.length > 5 && (
+                    <p className="text-gray-400 italic">
+                      ...{language === 'es' ? `y ${dup.files.length - 5} más` : `and ${dup.files.length - 5} more`}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
           </div>
+          {stats.deduplication.topDuplicates.length > duplicatesDisplayCount && (
+            <button
+              onClick={() => setDuplicatesDisplayCount(prev => prev + 20)}
+              className="w-full mt-3 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              {language === 'es' ? `Cargar más (${stats.deduplication.topDuplicates.length - duplicatesDisplayCount} restantes)` : `Load more (${stats.deduplication.topDuplicates.length - duplicatesDisplayCount} remaining)`}
+            </button>
+          )}
         </div>
       )}
 
@@ -928,34 +1006,6 @@ export function StatsDashboard() {
               );
             })()}
           </div>
-        </div>
-      </div>
-
-      {/* Size Distribution - full width */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.fileSizeDistribution}</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={barData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-              <YAxis tickFormatter={(v) => formatNumber(v)} tick={{ fontSize: 10 }} />
-              <Tooltip
-                formatter={(value) => [formatNumber(Number(value)), language === 'es' ? 'Archivos' : 'Files']}
-              />
-              <Bar
-                dataKey="count"
-                fill="#3B82F6"
-                name={t.fileCount}
-                label={{
-                  position: 'top',
-                  formatter: (value) => (value as number) > 0 ? formatNumber(value as number) : '',
-                  fontSize: 9,
-                  fill: '#374151',
-                }}
-              />
-            </BarChart>
-          </ResponsiveContainer>
         </div>
       </div>
 
