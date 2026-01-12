@@ -242,7 +242,13 @@ export function StatsDashboard() {
   }, [showProjection, projectionModel, historicalData, stats?.totalFiles]);
 
   // Combine historical and projection data for storage chart
+  // Apply deduplication ratio when ignoreDuplicates is enabled
   const growthChartData = useMemo(() => {
+    // Calculate dedup ratio inside useMemo for proper reactivity
+    const sizeRatio = ignoreDuplicates && stats?.deduplication && stats.totalSize > 0
+      ? stats.deduplication.uniqueSize / stats.totalSize
+      : 1;
+
     const combined: Array<{
       year: number;
       historical?: number;
@@ -251,35 +257,41 @@ export function StatsDashboard() {
       projectedHigh?: number;
     }> = [];
 
-    // Add historical data
+    // Add historical data (scaled by deduplication ratio)
     for (const d of historicalData) {
-      combined.push({ year: d.year, historical: d.sizeTB });
+      combined.push({ year: d.year, historical: d.sizeTB * sizeRatio });
     }
 
-    // Add projection data
+    // Add projection data (scaled by deduplication ratio)
     if (showProjection) {
       for (const d of projectionData) {
         const existing = combined.find(c => c.year === d.year);
         if (existing) {
-          existing.projected = d.projected;
-          existing.projectedLow = d.projectedLow;
-          existing.projectedHigh = d.projectedHigh;
+          existing.projected = d.projected * sizeRatio;
+          existing.projectedLow = d.projectedLow * sizeRatio;
+          existing.projectedHigh = d.projectedHigh * sizeRatio;
         } else {
           combined.push({
             year: d.year,
-            projected: d.projected,
-            projectedLow: d.projectedLow,
-            projectedHigh: d.projectedHigh,
+            projected: d.projected * sizeRatio,
+            projectedLow: d.projectedLow * sizeRatio,
+            projectedHigh: d.projectedHigh * sizeRatio,
           });
         }
       }
     }
 
     return combined.sort((a, b) => a.year - b.year);
-  }, [historicalData, projectionData, showProjection]);
+  }, [historicalData, projectionData, showProjection, ignoreDuplicates, stats?.deduplication, stats?.totalSize]);
 
   // Combine historical and projection data for file count chart
+  // Apply deduplication ratio when ignoreDuplicates is enabled
   const fileCountChartData = useMemo(() => {
+    // Calculate dedup ratio inside useMemo for proper reactivity
+    const fileRatio = ignoreDuplicates && stats?.deduplication && stats.totalFiles > 0
+      ? (stats.totalFiles - stats.deduplication.duplicateFileCount) / stats.totalFiles
+      : 1;
+
     const combined: Array<{
       year: number;
       historical?: number;
@@ -288,32 +300,32 @@ export function StatsDashboard() {
       projectedHigh?: number;
     }> = [];
 
-    // Add historical data
+    // Add historical data (scaled by deduplication ratio)
     for (const d of historicalData) {
-      combined.push({ year: d.year, historical: d.cumulativeFiles });
+      combined.push({ year: d.year, historical: Math.round(d.cumulativeFiles * fileRatio) });
     }
 
-    // Add projection data
+    // Add projection data (scaled by deduplication ratio)
     if (showProjection) {
       for (const d of projectionData) {
         const existing = combined.find(c => c.year === d.year);
         if (existing) {
-          existing.projected = d.projectedFiles;
-          existing.projectedLow = d.projectedFilesLow;
-          existing.projectedHigh = d.projectedFilesHigh;
+          existing.projected = Math.round(d.projectedFiles * fileRatio);
+          existing.projectedLow = Math.round(d.projectedFilesLow * fileRatio);
+          existing.projectedHigh = Math.round(d.projectedFilesHigh * fileRatio);
         } else {
           combined.push({
             year: d.year,
-            projected: d.projectedFiles,
-            projectedLow: d.projectedFilesLow,
-            projectedHigh: d.projectedFilesHigh,
+            projected: Math.round(d.projectedFiles * fileRatio),
+            projectedLow: Math.round(d.projectedFilesLow * fileRatio),
+            projectedHigh: Math.round(d.projectedFilesHigh * fileRatio),
           });
         }
       }
     }
 
     return combined.sort((a, b) => a.year - b.year);
-  }, [historicalData, projectionData, showProjection]);
+  }, [historicalData, projectionData, showProjection, ignoreDuplicates, stats?.deduplication, stats?.totalFiles]);
 
   if (!stats) {
     return (
@@ -352,21 +364,29 @@ export function StatsDashboard() {
     fileCount: folder.fileCount,
   }));
 
-  // Get final projection values for display
-  const finalProjection = projectionData.length > 0
-    ? projectionData[projectionData.length - 1].projected
-    : 0;
-  const finalProjectionFiles = projectionData.length > 0
-    ? projectionData[projectionData.length - 1].projectedFiles
-    : 0;
-
-  // Calculate adjusted stats when ignoring duplicates
+  // Calculate adjusted stats and ratios when ignoring duplicates
   const displayTotalFiles = ignoreDuplicates && stats.deduplication
     ? stats.totalFiles - stats.deduplication.duplicateFileCount
     : stats.totalFiles;
   const displayTotalSize = ignoreDuplicates && stats.deduplication
     ? stats.deduplication.uniqueSize
     : stats.totalSize;
+
+  // Calculate deduplication ratios for scaling charts
+  const sizeDeduplicationRatio = ignoreDuplicates && stats.deduplication && stats.totalSize > 0
+    ? stats.deduplication.uniqueSize / stats.totalSize
+    : 1;
+  const fileDeduplicationRatio = ignoreDuplicates && stats.deduplication && stats.totalFiles > 0
+    ? (stats.totalFiles - stats.deduplication.duplicateFileCount) / stats.totalFiles
+    : 1;
+
+  // Get final projection values for display (with deduplication applied)
+  const finalProjection = projectionData.length > 0
+    ? projectionData[projectionData.length - 1].projected * sizeDeduplicationRatio
+    : 0;
+  const finalProjectionFiles = projectionData.length > 0
+    ? Math.round(projectionData[projectionData.length - 1].projectedFiles * fileDeduplicationRatio)
+    : 0;
 
   return (
     <div className="h-full overflow-auto p-6 bg-gray-50">
