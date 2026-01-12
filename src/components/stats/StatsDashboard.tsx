@@ -189,8 +189,8 @@ export function StatsDashboard() {
     const pointsTB = trainingData.map(d => ({ x: d.year - baseYear, y: d.sizeTB }));
     const pointsFiles = trainingData.map(d => ({ x: d.year - baseYear, y: d.cumulativeFiles }));
 
-    // The user mentioned starting storage for projection is 2.59 TB (for data without dates)
-    const adjustedStartTB = 2.59;
+    // Use actual current storage from historical data for projection continuity
+    const currentStorageTB = historicalData[historicalData.length - 1]?.sizeTB || 0;
     const currentFileCount = trainingData[trainingData.length - 1]?.cumulativeFiles || stats?.totalFiles || 0;
 
     // Calculate linear growth rate from recent data
@@ -204,18 +204,18 @@ export function StatsDashboard() {
     let predictFiles: (year: number) => number;
 
     if (projectionModel === 'linear') {
-      // Linear: constant annual growth
-      predictTB = (year: number) => adjustedStartTB + annualGrowthTB * (year - currentYear);
+      // Linear: constant annual growth starting from current storage
+      predictTB = (year: number) => currentStorageTB + annualGrowthTB * (year - currentYear);
       predictFiles = (year: number) => currentFileCount + annualGrowthFiles * (year - currentYear);
     } else {
       // Logistic: S-curve with carrying capacity
       // Set carrying capacity to ~2.5x current data over 10 years (reasonable estimate)
-      const carryingCapacityTB = adjustedStartTB + annualGrowthTB * 10 * 2.5;
+      const carryingCapacityTB = currentStorageTB + annualGrowthTB * 10 * 2.5;
       const carryingCapacityFiles = currentFileCount + annualGrowthFiles * 10 * 2.5;
       // Estimate growth rate from recent slope
-      const rTB = annualGrowthTB / adjustedStartTB;
+      const rTB = annualGrowthTB / Math.max(currentStorageTB, 0.1);
       const rFiles = annualGrowthFiles / Math.max(currentFileCount, 1);
-      predictTB = (year: number) => logisticGrowth(adjustedStartTB, rTB, carryingCapacityTB, year - currentYear);
+      predictTB = (year: number) => logisticGrowth(currentStorageTB, rTB, carryingCapacityTB, year - currentYear);
       predictFiles = (year: number) => logisticGrowth(currentFileCount, rFiles, carryingCapacityFiles, year - currentYear);
     }
 
@@ -534,13 +534,13 @@ export function StatsDashboard() {
               </ResponsiveContainer>
             </div>
 
-            {/* Value labels inside chart area like Python chart */}
-            <div className="relative -mt-16 mb-12 mx-8 flex justify-between pointer-events-none">
-              <span className="px-2 py-1 bg-blue-100/90 text-blue-800 rounded text-xs font-medium">
+            {/* Value labels below chart */}
+            <div className="flex justify-between mt-2 text-xs">
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-medium">
                 {new Date().getFullYear()}: {historicalData[historicalData.length - 1]?.sizeTB.toFixed(1) || 0} TB
               </span>
               {showProjection && projectionData.length > 0 && (
-                <span className="px-2 py-1 bg-red-100/90 text-red-800 rounded text-xs font-medium">
+                <span className="px-2 py-1 bg-red-100 text-red-800 rounded font-medium">
                   {new Date().getFullYear() + 10}: {finalProjection.toFixed(1)} TB ({(finalProjection * 0.8).toFixed(1)}-{(finalProjection * 1.2).toFixed(1)})
                 </span>
               )}
@@ -659,13 +659,13 @@ export function StatsDashboard() {
               </ResponsiveContainer>
             </div>
 
-            {/* Value labels inside chart area like Python chart */}
-            <div className="relative -mt-16 mb-12 mx-8 flex justify-between pointer-events-none">
-              <span className="px-2 py-1 bg-green-100/90 text-green-800 rounded text-xs font-medium">
+            {/* Value labels below chart */}
+            <div className="flex justify-between mt-2 text-xs">
+              <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-medium">
                 {new Date().getFullYear()}: {(historicalData[historicalData.length - 1]?.cumulativeFiles / 1000).toFixed(0) || 0}K
               </span>
               {showProjection && projectionData.length > 0 && (
-                <span className="px-2 py-1 bg-red-100/90 text-red-800 rounded text-xs font-medium">
+                <span className="px-2 py-1 bg-red-100 text-red-800 rounded font-medium">
                   {new Date().getFullYear() + 10}: {(finalProjectionFiles / 1000).toFixed(0)}K ({(finalProjectionFiles * 0.8 / 1000).toFixed(0)}K-{(finalProjectionFiles * 1.2 / 1000).toFixed(0)}K)
                 </span>
               )}
