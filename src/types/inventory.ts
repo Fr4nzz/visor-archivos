@@ -190,6 +190,27 @@ export type TreeNode = FolderNode | FileNode;
 // Taxonomy level for statistics
 export type TaxonomyLevel = 'kingdom' | 'phylum' | 'class' | 'order' | 'family' | 'genus' | 'species';
 
+// Duplicate group info
+export interface DuplicateGroup {
+  hash: string;
+  fileSize: number;
+  copyCount: number;
+  wastedBytes: number;
+  sampleName: string;
+  samplePath: string;
+  files: { name: string; path: string }[];
+}
+
+// Deduplication statistics
+export interface DeduplicationStats {
+  uniqueSize: number;
+  duplicateSize: number;
+  duplicatePercent: number;
+  duplicateGroups: number;
+  duplicateFileCount: number;
+  topDuplicates: DuplicateGroup[];
+}
+
 // Metadata statistics
 export interface MetadataStats {
   // Taxonomy stats by level
@@ -226,6 +247,7 @@ export interface InventoryStats {
   filesByMonth?: Record<string, number>;
   hasDateData: boolean;
   metadataStats?: MetadataStats;
+  deduplication?: DeduplicationStats;
 }
 
 export interface SizeDistributionBucket {

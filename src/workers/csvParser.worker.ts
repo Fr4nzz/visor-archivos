@@ -7,6 +7,8 @@ import type {
   SizeDistributionBucket,
   EntryMetadata,
   MetadataStats,
+  DeduplicationStats,
+  DuplicateGroup,
 } from '../types/inventory';
 
 // Utility functions (duplicated to avoid import issues in worker)
@@ -523,6 +525,9 @@ function calculateStats(entries: InventoryEntry[], tree: FolderNode): InventoryS
     addToStats(metadataStats.dataTypes, entry.metadata.data_type, entry.size);
   }
 
+  // Calculate deduplication stats
+  const deduplication = calculateDeduplicationStats(files);
+
   return {
     totalFiles: files.length,
     totalFolders: folders.length,
@@ -535,5 +540,64 @@ function calculateStats(entries: InventoryEntry[], tree: FolderNode): InventoryS
     filesByMonth: hasDateData ? filesByMonth : undefined,
     hasDateData,
     metadataStats: metadataStats.hasMetadata ? metadataStats : undefined,
+    deduplication,
+  };
+}
+
+function calculateDeduplicationStats(files: InventoryEntry[]): DeduplicationStats | undefined {
+  // Group files by content hash
+  const byHash = new Map<string, InventoryEntry[]>();
+
+  for (const file of files) {
+    if (!file.hash) continue;
+
+    const existing = byHash.get(file.hash) || [];
+    existing.push(file);
+    byHash.set(file.hash, existing);
+  }
+
+  // No hash data available
+  if (byHash.size === 0) return undefined;
+
+  // Calculate unique storage (one copy of each hash)
+  let uniqueSize = 0;
+  const duplicateGroups: DuplicateGroup[] = [];
+  let totalDuplicateFiles = 0;
+
+  for (const [hash, group] of byHash) {
+    const fileSize = group[0].size;
+    uniqueSize += fileSize;
+
+    if (group.length > 1) {
+      const wastedBytes = fileSize * (group.length - 1);
+      totalDuplicateFiles += group.length - 1;
+
+      duplicateGroups.push({
+        hash,
+        fileSize,
+        copyCount: group.length,
+        wastedBytes,
+        sampleName: group[0].name,
+        samplePath: group[0].path,
+        files: group.map(f => ({ name: f.name, path: f.path })),
+      });
+    }
+  }
+
+  // Sort by wasted bytes descending
+  duplicateGroups.sort((a, b) => b.wastedBytes - a.wastedBytes);
+
+  // Calculate totals
+  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const duplicateSize = totalSize - uniqueSize;
+  const duplicatePercent = totalSize > 0 ? (duplicateSize / totalSize) * 100 : 0;
+
+  return {
+    uniqueSize,
+    duplicateSize,
+    duplicatePercent,
+    duplicateGroups: duplicateGroups.length,
+    duplicateFileCount: totalDuplicateFiles,
+    topDuplicates: duplicateGroups.slice(0, 20),
   };
 }

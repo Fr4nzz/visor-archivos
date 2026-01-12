@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { File, Folder, Database, PieChart, TrendingUp, BarChart3 } from 'lucide-react';
+import { File, Folder, Database, PieChart, TrendingUp, BarChart3, Copy } from 'lucide-react';
 import {
   Cell,
   BarChart,
@@ -127,8 +127,8 @@ export function StatsDashboard() {
   const historicalData = useMemo(() => {
     if (!entries || entries.length === 0) return [];
 
-    // Group by year - calculate actual size per year
-    const byYear: Record<number, number> = {};
+    // Group by year - calculate actual size AND file count per year
+    const byYear: Record<number, { size: number; count: number }> = {};
     let hasAnyDate = false;
 
     for (const entry of entries) {
@@ -139,7 +139,11 @@ export function StatsDashboard() {
 
       if (year !== null && year >= 1990 && year <= new Date().getFullYear()) {
         hasAnyDate = true;
-        byYear[year] = (byYear[year] || 0) + entry.size;
+        if (!byYear[year]) {
+          byYear[year] = { size: 0, count: 0 };
+        }
+        byYear[year].size += entry.size;
+        byYear[year].count += 1;
       }
     }
 
@@ -149,23 +153,27 @@ export function StatsDashboard() {
     const years = Object.keys(byYear).map(Number).sort();
     if (years.length === 0) return [];
 
-    let cumulative = 0;
-    const data: { year: number; size: number; sizeGB: number; sizeTB: number }[] = [];
+    let cumulativeSize = 0;
+    let cumulativeCount = 0;
+    const data: { year: number; size: number; sizeGB: number; sizeTB: number; fileCount: number; cumulativeFiles: number }[] = [];
 
     for (const year of years) {
-      cumulative += byYear[year];
+      cumulativeSize += byYear[year].size;
+      cumulativeCount += byYear[year].count;
       data.push({
         year,
-        size: cumulative,
-        sizeGB: cumulative / (1024 * 1024 * 1024),
-        sizeTB: cumulative / (1024 * 1024 * 1024 * 1024),
+        size: cumulativeSize,
+        sizeGB: cumulativeSize / (1024 * 1024 * 1024),
+        sizeTB: cumulativeSize / (1024 * 1024 * 1024 * 1024),
+        fileCount: byYear[year].count,
+        cumulativeFiles: cumulativeCount,
       });
     }
 
     return data;
   }, [entries]);
 
-  // Calculate projection
+  // Calculate projection (storage + file count)
   const projectionData = useMemo(() => {
     if (!showProjection || historicalData.length < 2) return [];
 
@@ -178,47 +186,60 @@ export function StatsDashboard() {
 
     // Normalize x values for better numerical stability
     const baseYear = trainingData[0].year;
-    const points = trainingData.map(d => ({ x: d.year - baseYear, y: d.sizeTB }));
+    const pointsTB = trainingData.map(d => ({ x: d.year - baseYear, y: d.sizeTB }));
+    const pointsFiles = trainingData.map(d => ({ x: d.year - baseYear, y: d.cumulativeFiles }));
 
     // The user mentioned starting storage for projection is 2.59 TB (for data without dates)
     const adjustedStartTB = 2.59;
+    const currentFileCount = trainingData[trainingData.length - 1]?.cumulativeFiles || stats?.totalFiles || 0;
 
     // Calculate linear growth rate from recent data
-    const { slope } = linearRegression(points);
-    const annualGrowthTB = Math.max(slope, 0.1); // Minimum 0.1 TB/year
+    const { slope: slopeTB } = linearRegression(pointsTB);
+    const { slope: slopeFiles } = linearRegression(pointsFiles);
+    const annualGrowthTB = Math.max(slopeTB, 0.1); // Minimum 0.1 TB/year
+    const annualGrowthFiles = Math.max(slopeFiles, 1000); // Minimum 1000 files/year
 
     // Calculate model parameters
-    let predict: (year: number) => number;
+    let predictTB: (year: number) => number;
+    let predictFiles: (year: number) => number;
 
     if (projectionModel === 'linear') {
       // Linear: constant annual growth
-      predict = (year: number) => adjustedStartTB + annualGrowthTB * (year - currentYear);
+      predictTB = (year: number) => adjustedStartTB + annualGrowthTB * (year - currentYear);
+      predictFiles = (year: number) => currentFileCount + annualGrowthFiles * (year - currentYear);
     } else {
       // Logistic: S-curve with carrying capacity
       // Set carrying capacity to ~2.5x current data over 10 years (reasonable estimate)
-      const carryingCapacity = adjustedStartTB + annualGrowthTB * 10 * 2.5;
+      const carryingCapacityTB = adjustedStartTB + annualGrowthTB * 10 * 2.5;
+      const carryingCapacityFiles = currentFileCount + annualGrowthFiles * 10 * 2.5;
       // Estimate growth rate from recent slope
-      const r = annualGrowthTB / adjustedStartTB;
-      predict = (year: number) => logisticGrowth(adjustedStartTB, r, carryingCapacity, year - currentYear);
+      const rTB = annualGrowthTB / adjustedStartTB;
+      const rFiles = annualGrowthFiles / Math.max(currentFileCount, 1);
+      predictTB = (year: number) => logisticGrowth(adjustedStartTB, rTB, carryingCapacityTB, year - currentYear);
+      predictFiles = (year: number) => logisticGrowth(currentFileCount, rFiles, carryingCapacityFiles, year - currentYear);
     }
 
     // Generate projection points
-    const data: { year: number; projected: number; projectedLow: number; projectedHigh: number }[] = [];
+    const data: { year: number; projected: number; projectedLow: number; projectedHigh: number; projectedFiles: number; projectedFilesLow: number; projectedFilesHigh: number }[] = [];
 
     for (let y = currentYear; y <= currentYear + projectionYears; y++) {
-      const projected = predict(y);
+      const projected = predictTB(y);
+      const projectedFiles = predictFiles(y);
       data.push({
         year: y,
         projected,
         projectedLow: projected * 0.8,  // -20%
         projectedHigh: projected * 1.2, // +20%
+        projectedFiles,
+        projectedFilesLow: projectedFiles * 0.8,
+        projectedFilesHigh: projectedFiles * 1.2,
       });
     }
 
     return data;
-  }, [showProjection, projectionModel, historicalData]);
+  }, [showProjection, projectionModel, historicalData, stats?.totalFiles]);
 
-  // Combine historical and projection data for chart
+  // Combine historical and projection data for storage chart
   const growthChartData = useMemo(() => {
     const combined: Array<{
       year: number;
@@ -247,6 +268,43 @@ export function StatsDashboard() {
             projected: d.projected,
             projectedLow: d.projectedLow,
             projectedHigh: d.projectedHigh,
+          });
+        }
+      }
+    }
+
+    return combined.sort((a, b) => a.year - b.year);
+  }, [historicalData, projectionData, showProjection]);
+
+  // Combine historical and projection data for file count chart
+  const fileCountChartData = useMemo(() => {
+    const combined: Array<{
+      year: number;
+      historical?: number;
+      projected?: number;
+      projectedLow?: number;
+      projectedHigh?: number;
+    }> = [];
+
+    // Add historical data
+    for (const d of historicalData) {
+      combined.push({ year: d.year, historical: d.cumulativeFiles });
+    }
+
+    // Add projection data
+    if (showProjection) {
+      for (const d of projectionData) {
+        const existing = combined.find(c => c.year === d.year);
+        if (existing) {
+          existing.projected = d.projectedFiles;
+          existing.projectedLow = d.projectedFilesLow;
+          existing.projectedHigh = d.projectedFilesHigh;
+        } else {
+          combined.push({
+            year: d.year,
+            projected: d.projectedFiles,
+            projectedLow: d.projectedFilesLow,
+            projectedHigh: d.projectedFilesHigh,
           });
         }
       }
@@ -292,15 +350,18 @@ export function StatsDashboard() {
     fileCount: folder.fileCount,
   }));
 
-  // Get final projection value for display
+  // Get final projection values for display
   const finalProjection = projectionData.length > 0
     ? projectionData[projectionData.length - 1].projected
+    : 0;
+  const finalProjectionFiles = projectionData.length > 0
+    ? projectionData[projectionData.length - 1].projectedFiles
     : 0;
 
   return (
     <div className="h-full overflow-auto p-6 bg-gray-50">
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-5 gap-4 mb-6">
         <SummaryCard
           title={t.totalFiles}
           value={formatNumber(stats.totalFiles)}
@@ -310,6 +371,7 @@ export function StatsDashboard() {
           title={t.totalSize}
           value={formatSize(stats.totalSize)}
           icon={<Database className="w-6 h-6" />}
+          subtitle={stats.deduplication ? `${formatSize(stats.deduplication.uniqueSize)} ${language === 'es' ? 'únicos' : 'unique'}` : undefined}
         />
         <SummaryCard
           title={t.foldersLabel}
@@ -321,18 +383,26 @@ export function StatsDashboard() {
           value={formatNumber(Object.keys(stats.extensionCounts).length)}
           icon={<PieChart className="w-6 h-6" />}
         />
+        {stats.deduplication && (
+          <SummaryCard
+            title={language === 'es' ? 'Duplicados' : 'Duplicates'}
+            value={`${stats.deduplication.duplicatePercent.toFixed(1)}%`}
+            icon={<Copy className="w-6 h-6" />}
+            subtitle={`${formatSize(stats.deduplication.duplicateSize)} ${language === 'es' ? 'desperdiciados' : 'wasted'}`}
+          />
+        )}
       </div>
 
-      {/* Historical Data + Storage by Project Row */}
-      <div className="grid grid-cols-2 gap-6 mb-6">
-        {/* Historical Data Collection Growth Chart */}
-        {historicalData.length > 0 && (
+      {/* Growth Charts Row - Storage and File Count side by side */}
+      {historicalData.length > 0 && (
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          {/* Storage Growth Chart */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-blue-600" />
                 <h3 className="text-base font-semibold text-gray-900">
-                  {language === 'es' ? 'Crecimiento Histórico' : 'Historical Growth'}
+                  {language === 'es' ? 'Crecimiento de Almacenamiento' : 'Storage Growth'}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
@@ -363,18 +433,22 @@ export function StatsDashboard() {
               </div>
             </div>
 
-            <div className="h-72">
+            <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={growthChartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                <ComposedChart data={growthChartData} margin={{ top: 10, right: 15, left: 5, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis
                     dataKey="year"
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: 11 }}
                     tickFormatter={(v) => v.toString()}
+                    interval="preserveStartEnd"
+                    tickCount={6}
+                    label={{ value: language === 'es' ? 'Año' : 'Year', position: 'bottom', offset: 5, fontSize: 11 }}
                   />
                   <YAxis
-                    tickFormatter={(v) => `${v.toFixed(1)} TB`}
+                    tickFormatter={(v) => `${v.toFixed(1)}`}
                     tick={{ fontSize: 10 }}
+                    label={{ value: language === 'es' ? 'Almacenamiento (TB)' : 'Storage (TB)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 10 }}
                   />
                   <Tooltip
                     formatter={(value, name) => {
@@ -388,7 +462,7 @@ export function StatsDashboard() {
                     labelFormatter={(label) => `${language === 'es' ? 'Año' : 'Year'}: ${label}`}
                   />
                   <Legend
-                    wrapperStyle={{ fontSize: 10 }}
+                    wrapperStyle={{ fontSize: 10, paddingTop: 5 }}
                     formatter={(value) => {
                       if (value === 'historical') return language === 'es' ? 'Histórico' : 'Historical';
                       if (value === 'projected') return language === 'es' ? 'Proyectado' : 'Projected';
@@ -404,14 +478,14 @@ export function StatsDashboard() {
                     strokeWidth={2}
                     fillOpacity={0.6}
                     name="historical"
-                    dot={{ fill: '#3B82F6', r: 2 }}
+                    dot={{ fill: '#3B82F6', r: 3 }}
                     connectNulls={false}
                   />
                   {showProjection && (
                     <Area
                       type="monotone"
                       dataKey="projectedHigh"
-                      fill="#F9A8D4"
+                      fill="#FCA5A5"
                       stroke="none"
                       fillOpacity={0.3}
                       name="projectionRange"
@@ -433,10 +507,10 @@ export function StatsDashboard() {
                     <Line
                       type="monotone"
                       dataKey="projected"
-                      stroke="#9D174D"
+                      stroke="#DC2626"
                       strokeWidth={2}
                       strokeDasharray="5 5"
-                      dot={{ fill: '#9D174D', r: 2 }}
+                      dot={{ fill: '#DC2626', r: 3 }}
                       name="projected"
                       connectNulls={false}
                     />
@@ -451,16 +525,139 @@ export function StatsDashboard() {
               </ResponsiveContainer>
             </div>
 
-            {showProjection && projectionData.length > 0 && (
-              <div className="mt-2 p-2 bg-pink-50 rounded border border-pink-200">
-                <p className="text-xs text-pink-800">
-                  <strong>{language === 'es' ? '10 años' : '10 yr'}:</strong>{' '}
-                  {finalProjection.toFixed(1)} TB ({(finalProjection * 0.8).toFixed(1)} - {(finalProjection * 1.2).toFixed(1)})
-                </p>
-              </div>
-            )}
+            {/* Value labels like the Python chart */}
+            <div className="flex justify-between mt-2 text-xs">
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                {new Date().getFullYear()}: {historicalData[historicalData.length - 1]?.sizeTB.toFixed(1) || 0} TB
+              </span>
+              {showProjection && projectionData.length > 0 && (
+                <span className="px-2 py-1 bg-red-100 text-red-800 rounded">
+                  {new Date().getFullYear() + 10}: {finalProjection.toFixed(1)} TB ({(finalProjection * 0.8).toFixed(1)}-{(finalProjection * 1.2).toFixed(1)})
+                </span>
+              )}
+            </div>
           </div>
-        )}
+
+          {/* File Count Growth Chart */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <File className="w-4 h-4 text-green-600" />
+                <h3 className="text-base font-semibold text-gray-900">
+                  {language === 'es' ? 'Crecimiento de Archivos' : 'File Count Growth'}
+                </h3>
+              </div>
+            </div>
+
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={fileCountChartData} margin={{ top: 10, right: 15, left: 5, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis
+                    dataKey="year"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => v.toString()}
+                    interval="preserveStartEnd"
+                    tickCount={6}
+                    label={{ value: language === 'es' ? 'Año' : 'Year', position: 'bottom', offset: 5, fontSize: 11 }}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : formatNumber(v)}
+                    tick={{ fontSize: 10 }}
+                    label={{ value: language === 'es' ? 'Archivos (miles)' : 'Files (thousands)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 10 }}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => {
+                      const label = name === 'historical'
+                        ? (language === 'es' ? 'Histórico' : 'Historical')
+                        : name === 'projected'
+                        ? (language === 'es' ? 'Proyectado' : 'Projected')
+                        : String(name || '');
+                      return [formatNumber(value as number), label];
+                    }}
+                    labelFormatter={(label) => `${language === 'es' ? 'Año' : 'Year'}: ${label}`}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 10, paddingTop: 5 }}
+                    formatter={(value) => {
+                      if (value === 'historical') return language === 'es' ? 'Histórico' : 'Historical';
+                      if (value === 'projected') return language === 'es' ? 'Proyectado' : 'Projected';
+                      if (value === 'projectionRange') return '±20%';
+                      return value;
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="historical"
+                    fill="#86EFAC"
+                    stroke="#22C55E"
+                    strokeWidth={2}
+                    fillOpacity={0.6}
+                    name="historical"
+                    dot={{ fill: '#22C55E', r: 3 }}
+                    connectNulls={false}
+                  />
+                  {showProjection && (
+                    <Area
+                      type="monotone"
+                      dataKey="projectedHigh"
+                      fill="#FCA5A5"
+                      stroke="none"
+                      fillOpacity={0.3}
+                      name="projectionRange"
+                      connectNulls={false}
+                    />
+                  )}
+                  {showProjection && (
+                    <Area
+                      type="monotone"
+                      dataKey="projectedLow"
+                      fill="#FFFFFF"
+                      stroke="none"
+                      fillOpacity={1}
+                      connectNulls={false}
+                      legendType="none"
+                    />
+                  )}
+                  {showProjection && (
+                    <Line
+                      type="monotone"
+                      dataKey="projected"
+                      stroke="#DC2626"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={{ fill: '#DC2626', r: 3 }}
+                      name="projected"
+                      connectNulls={false}
+                    />
+                  )}
+                  <ReferenceLine
+                    x={new Date().getFullYear()}
+                    stroke="#6B7280"
+                    strokeDasharray="3 3"
+                    label={{ value: language === 'es' ? 'Hoy' : 'Today', position: 'top', fontSize: 9, fill: '#6B7280' }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Value labels like the Python chart */}
+            <div className="flex justify-between mt-2 text-xs">
+              <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
+                {new Date().getFullYear()}: {(historicalData[historicalData.length - 1]?.cumulativeFiles / 1000).toFixed(0) || 0}K
+              </span>
+              {showProjection && projectionData.length > 0 && (
+                <span className="px-2 py-1 bg-red-100 text-red-800 rounded">
+                  {new Date().getFullYear() + 10}: {(finalProjectionFiles / 1000).toFixed(0)}K ({(finalProjectionFiles * 0.8 / 1000).toFixed(0)}K-{(finalProjectionFiles * 1.2 / 1000).toFixed(0)}K)
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Storage by Project Row */}
+      <div className="grid grid-cols-2 gap-6 mb-6">
 
         {/* Storage by Project - Horizontal Bar Chart */}
         {projectBarData.length > 0 && (
@@ -517,6 +714,69 @@ export function StatsDashboard() {
           </div>
         )}
       </div>
+
+      {/* Deduplication Analysis Section */}
+      {stats.deduplication && stats.deduplication.topDuplicates.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Copy className="w-5 h-5 text-orange-600" />
+            <h3 className="text-lg font-semibold text-gray-900">
+              {language === 'es' ? 'Análisis de Duplicados' : 'Duplicate Analysis'}
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="bg-gray-50 rounded p-3">
+              <p className="text-xs text-gray-500">{language === 'es' ? 'Almacenamiento Total' : 'Total Storage'}</p>
+              <p className="text-lg font-semibold text-gray-900">{formatSize(stats.totalSize)}</p>
+            </div>
+            <div className="bg-green-50 rounded p-3">
+              <p className="text-xs text-gray-500">{language === 'es' ? 'Almacenamiento Único' : 'Unique Storage'}</p>
+              <p className="text-lg font-semibold text-green-700">{formatSize(stats.deduplication.uniqueSize)}</p>
+            </div>
+            <div className="bg-red-50 rounded p-3">
+              <p className="text-xs text-gray-500">{language === 'es' ? 'Almacenamiento Duplicado' : 'Duplicate Storage'}</p>
+              <p className="text-lg font-semibold text-red-700">{formatSize(stats.deduplication.duplicateSize)}</p>
+            </div>
+            <div className="bg-orange-50 rounded p-3">
+              <p className="text-xs text-gray-500">{language === 'es' ? 'Grupos Duplicados' : 'Duplicate Groups'}</p>
+              <p className="text-lg font-semibold text-orange-700">{formatNumber(stats.deduplication.duplicateGroups)}</p>
+            </div>
+          </div>
+
+          <h4 className="text-sm font-medium text-gray-700 mb-2">
+            {language === 'es' ? 'Principales Grupos de Duplicados por Almacenamiento Desperdiciado' : 'Top Duplicate Groups by Wasted Storage'}
+          </h4>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {stats.deduplication.topDuplicates.slice(0, 10).map((dup, index) => (
+              <div
+                key={dup.hash}
+                className="flex items-center justify-between p-2 rounded hover:bg-gray-50 border border-gray-100"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-sm font-medium text-gray-400 w-5">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-gray-900 truncate" title={dup.sampleName}>
+                      {dup.sampleName}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate" title={dup.samplePath}>
+                      {dup.samplePath}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
+                    {dup.copyCount} {language === 'es' ? 'copias' : 'copies'}
+                  </span>
+                  <span className="text-sm font-medium text-red-600 w-24 text-right">
+                    {formatSize(dup.wastedBytes)} {language === 'es' ? 'desp.' : 'wasted'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts Row - File Types */}
       <div className="grid grid-cols-2 gap-6 mb-6">
