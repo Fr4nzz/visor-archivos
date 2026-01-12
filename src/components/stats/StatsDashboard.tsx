@@ -93,7 +93,7 @@ export function StatsDashboard() {
   const { language } = useUIStore();
   const t = translations[language];
   const [taxonomyLevel, setTaxonomyLevel] = useState<TaxonomyLevel>('species');
-  const [showProjection, setShowProjection] = useState(false);
+  const [showProjection, setShowProjection] = useState(true);
   const [projectionModel, setProjectionModel] = useState<ProjectionModel>('linear');
 
   // Extract year from date string, handling various formats including year-only
@@ -462,11 +462,13 @@ export function StatsDashboard() {
                     labelFormatter={(label) => `${language === 'es' ? 'Año' : 'Year'}: ${label}`}
                   />
                   <Legend
-                    wrapperStyle={{ fontSize: 10, paddingTop: 5 }}
+                    verticalAlign="top"
+                    align="left"
+                    wrapperStyle={{ fontSize: 10, paddingLeft: 40, paddingTop: 0 }}
                     formatter={(value) => {
                       if (value === 'historical') return language === 'es' ? 'Histórico' : 'Historical';
                       if (value === 'projected') return language === 'es' ? 'Proyectado' : 'Projected';
-                      if (value === 'projectionRange') return '±20%';
+                      if (value === 'projectionRange') return language === 'es' ? '95% PI' : '95% PI';
                       return value;
                     }}
                   />
@@ -509,8 +511,15 @@ export function StatsDashboard() {
                       dataKey="projected"
                       stroke="#DC2626"
                       strokeWidth={2}
-                      strokeDasharray="5 5"
-                      dot={{ fill: '#DC2626', r: 3 }}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        const currentYear = new Date().getFullYear();
+                        // Only show dots at 2031 (5 years) and 2036 (10 years)
+                        if (payload.year === currentYear + 5 || payload.year === currentYear + 10) {
+                          return <circle cx={cx} cy={cy} r={4} fill="#DC2626" />;
+                        }
+                        return <circle cx={cx} cy={cy} r={0} fill="transparent" />;
+                      }}
                       name="projected"
                       connectNulls={false}
                     />
@@ -525,13 +534,13 @@ export function StatsDashboard() {
               </ResponsiveContainer>
             </div>
 
-            {/* Value labels like the Python chart */}
-            <div className="flex justify-between mt-2 text-xs">
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
+            {/* Value labels inside chart area like Python chart */}
+            <div className="relative -mt-16 mb-12 mx-8 flex justify-between pointer-events-none">
+              <span className="px-2 py-1 bg-blue-100/90 text-blue-800 rounded text-xs font-medium">
                 {new Date().getFullYear()}: {historicalData[historicalData.length - 1]?.sizeTB.toFixed(1) || 0} TB
               </span>
               {showProjection && projectionData.length > 0 && (
-                <span className="px-2 py-1 bg-red-100 text-red-800 rounded">
+                <span className="px-2 py-1 bg-red-100/90 text-red-800 rounded text-xs font-medium">
                   {new Date().getFullYear() + 10}: {finalProjection.toFixed(1)} TB ({(finalProjection * 0.8).toFixed(1)}-{(finalProjection * 1.2).toFixed(1)})
                 </span>
               )}
@@ -578,11 +587,13 @@ export function StatsDashboard() {
                     labelFormatter={(label) => `${language === 'es' ? 'Año' : 'Year'}: ${label}`}
                   />
                   <Legend
-                    wrapperStyle={{ fontSize: 10, paddingTop: 5 }}
+                    verticalAlign="top"
+                    align="left"
+                    wrapperStyle={{ fontSize: 10, paddingLeft: 40, paddingTop: 0 }}
                     formatter={(value) => {
                       if (value === 'historical') return language === 'es' ? 'Histórico' : 'Historical';
                       if (value === 'projected') return language === 'es' ? 'Proyectado' : 'Projected';
-                      if (value === 'projectionRange') return '±20%';
+                      if (value === 'projectionRange') return language === 'es' ? '95% PI' : '95% PI';
                       return value;
                     }}
                   />
@@ -625,8 +636,15 @@ export function StatsDashboard() {
                       dataKey="projected"
                       stroke="#DC2626"
                       strokeWidth={2}
-                      strokeDasharray="5 5"
-                      dot={{ fill: '#DC2626', r: 3 }}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        const currentYear = new Date().getFullYear();
+                        // Only show dots at 2031 (5 years) and 2036 (10 years)
+                        if (payload.year === currentYear + 5 || payload.year === currentYear + 10) {
+                          return <circle cx={cx} cy={cy} r={4} fill="#DC2626" />;
+                        }
+                        return <circle cx={cx} cy={cy} r={0} fill="transparent" />;
+                      }}
                       name="projected"
                       connectNulls={false}
                     />
@@ -641,13 +659,13 @@ export function StatsDashboard() {
               </ResponsiveContainer>
             </div>
 
-            {/* Value labels like the Python chart */}
-            <div className="flex justify-between mt-2 text-xs">
-              <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
+            {/* Value labels inside chart area like Python chart */}
+            <div className="relative -mt-16 mb-12 mx-8 flex justify-between pointer-events-none">
+              <span className="px-2 py-1 bg-green-100/90 text-green-800 rounded text-xs font-medium">
                 {new Date().getFullYear()}: {(historicalData[historicalData.length - 1]?.cumulativeFiles / 1000).toFixed(0) || 0}K
               </span>
               {showProjection && projectionData.length > 0 && (
-                <span className="px-2 py-1 bg-red-100 text-red-800 rounded">
+                <span className="px-2 py-1 bg-red-100/90 text-red-800 rounded text-xs font-medium">
                   {new Date().getFullYear() + 10}: {(finalProjectionFiles / 1000).toFixed(0)}K ({(finalProjectionFiles * 0.8 / 1000).toFixed(0)}K-{(finalProjectionFiles * 1.2 / 1000).toFixed(0)}K)
                 </span>
               )}
