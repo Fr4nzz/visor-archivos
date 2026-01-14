@@ -126,3 +126,28 @@ export function getDepthColor(depth: number, maxDepth: number = 10): string {
   const lightness = 70 - (depth / maxDepth) * 40;
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
+
+// Generate consistent color from string (for species/project)
+function stringToHue(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash) % 360;
+}
+
+// Species colors - green-based palette
+export function getColorBySpecies(species: string | null | undefined): string {
+  if (!species) return '#9E9E9E'; // Gray for unknown
+
+  const hue = stringToHue(species);
+  return `hsl(${hue}, 65%, 50%)`;
+}
+
+// Project colors - distinct palette
+export function getColorByProject(project: string | null | undefined): string {
+  if (!project) return '#9E9E9E'; // Gray for unknown
+
+  const hue = stringToHue(project);
+  return `hsl(${hue}, 70%, 45%)`;
+}

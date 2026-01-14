@@ -5,6 +5,10 @@ import type {
   FolderNode,
   InventoryStats,
   SizeDistributionBucket,
+  EntryMetadata,
+  MetadataStats,
+  DeduplicationStats,
+  DuplicateGroup,
 } from '../types/inventory';
 
 // Utility functions (duplicated to avoid import issues in worker)
@@ -120,6 +124,64 @@ function mapRowToEntry(
   const typeRaw = row[mapping.type]?.toLowerCase() || 'file';
   const type = typeRaw === 'folder' || typeRaw === 'directory' ? 'folder' : 'file';
 
+  // Extract metadata if columns are mapped
+  const metadata: EntryMetadata = {};
+  let hasMetadata = false;
+
+  // Helper function to extract string metadata
+  const extractString = (field: keyof typeof mapping) => {
+    const col = mapping[field];
+    if (col && row[col]) {
+      (metadata as Record<string, unknown>)[field] = row[col];
+      hasMetadata = true;
+    }
+  };
+
+  // Date fields
+  extractString('extracted_date');
+  extractString('date_precision');
+  extractString('date_format_hint');
+  extractString('date_confidence');
+
+  // Taxonomy - GBIF hierarchy
+  extractString('taxa_verbatim');
+  extractString('taxa_interpreted');
+  extractString('taxa_rank');
+  extractString('taxa_kingdom');
+  extractString('taxa_phylum');
+  extractString('taxa_class');
+  extractString('taxa_order');
+  extractString('taxa_family');
+  extractString('taxa_genus');
+  extractString('taxa_species');
+  extractString('taxa_common_name');
+  extractString('taxa_gbif_key');
+  extractString('taxa_source');
+
+  // Legacy species
+  extractString('species');
+  extractString('species_source');
+
+  // Equipment & Location
+  extractString('equipment');
+  extractString('location');
+  extractString('zone');
+  extractString('project');
+  extractString('data_type');
+
+  // Specialized fields
+  extractString('climate_variable');
+  extractString('climate_extent');
+  extractString('camera_id');
+  extractString('sequence_number');
+  extractString('deforestation_period');
+
+  // Boolean field
+  if (mapping.is_system_file && row[mapping.is_system_file]) {
+    metadata.is_system_file = row[mapping.is_system_file]?.toLowerCase() === 'true';
+    hasMetadata = true;
+  }
+
   return {
     id: `${index}-${normalizedPath.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 50)}`,
     path: normalizedPath,
@@ -137,6 +199,7 @@ function mapRowToEntry(
       : getParentPath(normalizedPath),
     depth: mapping.depth ? parseInt(row[mapping.depth]) || getDepth(normalizedPath) : getDepth(normalizedPath),
     hash: mapping.hash ? row[mapping.hash] : undefined,
+    metadata: hasMetadata ? metadata : undefined,
   };
 }
 
@@ -209,6 +272,7 @@ function buildFolderTree(entries: InventoryEntry[]): FolderNode {
       extension: file.extension,
       modified: file.modified,
       depth: file.depth,
+      metadata: file.metadata,
     };
 
     parent.children.set(fileNode.name, fileNode);
@@ -380,6 +444,90 @@ function calculateStats(entries: InventoryEntry[], tree: FolderNode): InventoryS
     }
   }
 
+  // Calculate metadata statistics
+  const metadataStats: MetadataStats = {
+    taxonomy: {
+      kingdom: {},
+      phylum: {},
+      class: {},
+      order: {},
+      family: {},
+      genus: {},
+      species: {},
+    },
+    species: {},
+    projects: {},
+    locations: {},
+    zones: {},
+    equipment: {},
+    dataTypes: {},
+    hasMetadata: false,
+    hasTaxonomy: false,
+  };
+
+  // Helper to add to stats
+  const addToStats = (
+    statsObj: Record<string, { count: number; size: number }>,
+    key: string | null | undefined,
+    size: number
+  ) => {
+    if (!key) return;
+    if (!statsObj[key]) {
+      statsObj[key] = { count: 0, size: 0 };
+    }
+    statsObj[key].count++;
+    statsObj[key].size += size;
+  };
+
+  for (const entry of entries) {
+    if (!entry.metadata) continue;
+    metadataStats.hasMetadata = true;
+
+    // Taxonomy stats
+    if (entry.metadata.taxa_kingdom) {
+      metadataStats.hasTaxonomy = true;
+      addToStats(metadataStats.taxonomy.kingdom, entry.metadata.taxa_kingdom, entry.size);
+    }
+    if (entry.metadata.taxa_phylum) {
+      metadataStats.hasTaxonomy = true;
+      addToStats(metadataStats.taxonomy.phylum, entry.metadata.taxa_phylum, entry.size);
+    }
+    if (entry.metadata.taxa_class) {
+      metadataStats.hasTaxonomy = true;
+      addToStats(metadataStats.taxonomy.class, entry.metadata.taxa_class, entry.size);
+    }
+    if (entry.metadata.taxa_order) {
+      metadataStats.hasTaxonomy = true;
+      addToStats(metadataStats.taxonomy.order, entry.metadata.taxa_order, entry.size);
+    }
+    if (entry.metadata.taxa_family) {
+      metadataStats.hasTaxonomy = true;
+      addToStats(metadataStats.taxonomy.family, entry.metadata.taxa_family, entry.size);
+    }
+    if (entry.metadata.taxa_genus) {
+      metadataStats.hasTaxonomy = true;
+      addToStats(metadataStats.taxonomy.genus, entry.metadata.taxa_genus, entry.size);
+    }
+    // Use taxa_interpreted for species level (scientific name)
+    if (entry.metadata.taxa_interpreted) {
+      metadataStats.hasTaxonomy = true;
+      addToStats(metadataStats.taxonomy.species, entry.metadata.taxa_interpreted, entry.size);
+    }
+
+    // Legacy species (for backwards compatibility)
+    addToStats(metadataStats.species, entry.metadata.species, entry.size);
+
+    // Other stats
+    addToStats(metadataStats.projects, entry.metadata.project, entry.size);
+    addToStats(metadataStats.locations, entry.metadata.location, entry.size);
+    addToStats(metadataStats.zones, entry.metadata.zone, entry.size);
+    addToStats(metadataStats.equipment, entry.metadata.equipment, entry.size);
+    addToStats(metadataStats.dataTypes, entry.metadata.data_type, entry.size);
+  }
+
+  // Calculate deduplication stats
+  const deduplication = calculateDeduplicationStats(files);
+
   return {
     totalFiles: files.length,
     totalFolders: folders.length,
@@ -391,5 +539,65 @@ function calculateStats(entries: InventoryEntry[], tree: FolderNode): InventoryS
     largestFolders,
     filesByMonth: hasDateData ? filesByMonth : undefined,
     hasDateData,
+    metadataStats: metadataStats.hasMetadata ? metadataStats : undefined,
+    deduplication,
+  };
+}
+
+function calculateDeduplicationStats(files: InventoryEntry[]): DeduplicationStats | undefined {
+  // Group files by content hash
+  const byHash = new Map<string, InventoryEntry[]>();
+
+  for (const file of files) {
+    if (!file.hash) continue;
+
+    const existing = byHash.get(file.hash) || [];
+    existing.push(file);
+    byHash.set(file.hash, existing);
+  }
+
+  // No hash data available
+  if (byHash.size === 0) return undefined;
+
+  // Calculate unique storage (one copy of each hash)
+  let uniqueSize = 0;
+  const duplicateGroups: DuplicateGroup[] = [];
+  let totalDuplicateFiles = 0;
+
+  for (const [hash, group] of byHash) {
+    const fileSize = group[0].size;
+    uniqueSize += fileSize;
+
+    if (group.length > 1) {
+      const wastedBytes = fileSize * (group.length - 1);
+      totalDuplicateFiles += group.length - 1;
+
+      duplicateGroups.push({
+        hash,
+        fileSize,
+        copyCount: group.length,
+        wastedBytes,
+        sampleName: group[0].name,
+        samplePath: group[0].path,
+        files: group.map(f => ({ name: f.name, path: f.path })),
+      });
+    }
+  }
+
+  // Sort by wasted bytes descending
+  duplicateGroups.sort((a, b) => b.wastedBytes - a.wastedBytes);
+
+  // Calculate totals
+  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const duplicateSize = totalSize - uniqueSize;
+  const duplicatePercent = totalSize > 0 ? (duplicateSize / totalSize) * 100 : 0;
+
+  return {
+    uniqueSize,
+    duplicateSize,
+    duplicatePercent,
+    duplicateGroups: duplicateGroups.length,
+    duplicateFileCount: totalDuplicateFiles,
+    topDuplicates: duplicateGroups.slice(0, 20),
   };
 }

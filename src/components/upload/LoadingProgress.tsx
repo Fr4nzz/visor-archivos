@@ -1,5 +1,7 @@
 import { Loader2, CheckCircle2, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useUIStore } from '../../stores/uiStore';
+import { translations } from '../../utils/translations';
 
 interface LoadingProgressProps {
   progress: number;
@@ -9,15 +11,15 @@ interface LoadingProgressProps {
 
 interface Stage {
   id: string;
-  label: string;
+  labelKey: 'parsingCsv' | 'buildingFolderTree' | 'calculatingStatistics' | 'complete';
   minProgress: number;
 }
 
 const stages: Stage[] = [
-  { id: 'parsing', label: 'Parsing CSV...', minProgress: 0 },
-  { id: 'building', label: 'Building folder tree...', minProgress: 90 },
-  { id: 'stats', label: 'Calculating statistics...', minProgress: 95 },
-  { id: 'complete', label: 'Complete!', minProgress: 100 },
+  { id: 'parsing', labelKey: 'parsingCsv', minProgress: 0 },
+  { id: 'building', labelKey: 'buildingFolderTree', minProgress: 90 },
+  { id: 'stats', labelKey: 'calculatingStatistics', minProgress: 95 },
+  { id: 'complete', labelKey: 'complete', minProgress: 100 },
 ];
 
 function getStageStatus(stage: Stage, currentProgress: number): 'done' | 'active' | 'pending' {
@@ -33,7 +35,17 @@ function getStageStatus(stage: Stage, currentProgress: number): 'done' | 'active
   return 'pending';
 }
 
-export function LoadingProgress({ progress, stage, rowsProcessed }: LoadingProgressProps) {
+export function LoadingProgress({ progress, rowsProcessed }: LoadingProgressProps) {
+  const { language } = useUIStore();
+  const t = translations[language];
+
+  // Get the current stage label for display
+  const currentStageIndex = stages.findIndex((s, i) => {
+    const nextStage = stages[i + 1];
+    return progress >= s.minProgress && (!nextStage || progress < nextStage.minProgress);
+  });
+  const currentStageLabel = currentStageIndex >= 0 ? t[stages[currentStageIndex].labelKey] : t.parsingCsv;
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
       <div className="w-full max-w-md">
@@ -41,15 +53,15 @@ export function LoadingProgress({ progress, stage, rowsProcessed }: LoadingProgr
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
             <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-900">Processing your inventory</h2>
-          <p className="text-gray-500 mt-1">{stage}</p>
+          <h2 className="text-xl font-semibold text-gray-900">{t.processingInventory}</h2>
+          <p className="text-gray-500 mt-1">{currentStageLabel}</p>
         </div>
 
         {/* Progress bar */}
         <div className="mb-8">
           <div className="flex justify-between text-sm text-gray-500 mb-2">
             <span>{Math.round(progress)}%</span>
-            {rowsProcessed && <span>{rowsProcessed.toLocaleString()} rows</span>}
+            {rowsProcessed && <span>{rowsProcessed.toLocaleString()} {t.rows}</span>}
           </div>
           <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
             <div
@@ -77,7 +89,7 @@ export function LoadingProgress({ progress, stage, rowsProcessed }: LoadingProgr
                 {status === 'done' && <CheckCircle2 className="w-5 h-5" />}
                 {status === 'active' && <Loader2 className="w-5 h-5 animate-spin" />}
                 {status === 'pending' && <Clock className="w-5 h-5" />}
-                <span>{s.label}</span>
+                <span>{t[s.labelKey]}</span>
               </div>
             );
           })}

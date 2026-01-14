@@ -4,9 +4,11 @@ import { Home, ChevronRight, RotateCcw } from 'lucide-react';
 import { useInventoryStore } from '../../stores/inventoryStore';
 import { useUIStore } from '../../stores/uiStore';
 import { findNode, getBreadcrumbs } from '../../utils/treeUtils';
-import { getColorByExtension, getColorByCategory, getDepthColor } from '../../utils/colorSchemes';
+import { getColorByExtension, getColorByCategory, getDepthColor, getColorBySpecies, getColorByProject } from '../../utils/colorSchemes';
+import type { TreemapColorBy } from '../../stores/uiStore';
 import { formatSize, truncate } from '../../utils/formatters';
-import type { FolderNode, FileNode } from '../../types/inventory';
+import { translations } from '../../utils/translations';
+import type { FolderNode, FileNode, EntryMetadata } from '../../types/inventory';
 
 interface D3TreeNode {
   name: string;
@@ -16,6 +18,7 @@ interface D3TreeNode {
   extension?: string | null;
   children?: D3TreeNode[];
   hasChildren?: boolean;
+  metadata?: EntryMetadata;
 }
 
 function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 2, currentDepth: number = 0): D3TreeNode {
@@ -26,6 +29,7 @@ function folderToD3Tree(node: FolderNode | FileNode, maxDepth: number = 2, curre
       type: 'file',
       size: node.size,
       extension: node.extension,
+      metadata: node.metadata,
     };
   }
 
@@ -68,6 +72,7 @@ function getImmediateChildren(node: FolderNode): D3TreeNode[] {
         type: 'file',
         size: child.size,
         extension: child.extension,
+        metadata: child.metadata,
       });
     } else {
       const folder = child as FolderNode;
@@ -88,7 +93,8 @@ export function TreemapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const { folderTree } = useInventoryStore();
-  const { treemapCurrentPath, setTreemapCurrentPath, treemapColorBy, setTreemapColorBy } = useUIStore();
+  const { treemapCurrentPath, setTreemapCurrentPath, treemapColorBy, setTreemapColorBy, language } = useUIStore();
+  const t = translations[language];
   const [hoveredNode, setHoveredNode] = useState<D3TreeNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -195,6 +201,10 @@ export function TreemapView() {
         return getColorByCategory(d.data.extension ?? null);
       case 'depth':
         return getDepthColor(effectiveDepth);
+      case 'species':
+        return getColorBySpecies(d.data.metadata?.species);
+      case 'project':
+        return getColorByProject(d.data.metadata?.project);
       default:
         return getColorByExtension(d.data.extension ?? null);
     }
@@ -305,17 +315,17 @@ export function TreemapView() {
       // Labels (only for non-expanded or small enough areas)
       nodeGroups
         .append('text')
-        .attr('x', 4)
-        .attr('y', 14)
+        .attr('x', 6)
+        .attr('y', 20)
         .text((d) => {
           const w = d.x1 - d.x0;
           const h = d.y1 - d.y0;
-          if (w < 50 || h < 20) return '';
+          if (w < 60 || h < 25) return '';
           // For expanded folders, show name at top
           if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
-            return truncate(d.data.name, Math.floor(w / 7));
+            return truncate(d.data.name, Math.floor(w / 9));
           }
-          return truncate(d.data.name, Math.floor(w / 7));
+          return truncate(d.data.name, Math.floor(w / 9));
         })
         .attr('fill', (d) => {
           if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) {
@@ -323,25 +333,25 @@ export function TreemapView() {
           }
           return '#fff';
         })
-        .attr('font-size', '11px')
-        .attr('font-weight', '500')
+        .attr('font-size', '14px')
+        .attr('font-weight', '600')
         .style('pointer-events', 'none')
-        .style('text-shadow', '0 1px 2px rgba(0,0,0,0.5)');
+        .style('text-shadow', '0 1px 3px rgba(0,0,0,0.6)');
 
       // Size labels for non-expanded nodes
       nodeGroups
         .append('text')
-        .attr('x', 4)
-        .attr('y', 28)
+        .attr('x', 6)
+        .attr('y', 38)
         .text((d) => {
           const w = d.x1 - d.x0;
           const h = d.y1 - d.y0;
-          if (w < 60 || h < 35) return '';
+          if (w < 70 || h < 50) return '';
           if (d.data.type === 'folder' && expandedPaths.has(d.data.path)) return '';
           return formatSize(d.value || 0);
         })
-        .attr('fill', 'rgba(255,255,255,0.8)')
-        .attr('font-size', '10px')
+        .attr('fill', 'rgba(255,255,255,0.9)')
+        .attr('font-size', '12px')
         .style('pointer-events', 'none');
 
       // Render children for expanded folders
@@ -380,8 +390,8 @@ export function TreemapView() {
             .sum((c) => (c.type === 'file' ? c.size : 0) || (c.children ? 0 : c.size))
             .sort((a, b) => (b.value || 0) - (a.value || 0));
 
-          // Padding for the label at top
-          const labelPadding = 20;
+          // Padding for the label at top (larger now for bigger text)
+          const labelPadding = 28;
           const innerPadding = 4;
 
           // Create treemap for children within this node's bounds
@@ -418,15 +428,71 @@ export function TreemapView() {
 
   }, [currentNode, dimensions, treemapColorBy, expandedPaths, toggleExpanded, getColor, folderTree]);
 
-  // Reset expansions when path changes
+  // Auto-expand folders that occupy more than 50% of the area
   useEffect(() => {
-    setExpandedPaths(new Set());
-  }, [treemapCurrentPath]);
+    if (!currentNode || !folderTree) return;
+
+    const { width, height } = dimensions;
+    if (width < 50 || height < 50) return;
+
+    const totalArea = width * height;
+    const autoExpandPaths = new Set<string>();
+
+    // Recursive function to find and expand large folders
+    const findLargeFolders = (node: FolderNode, parentArea: number, currentExpandedPaths: Set<string>) => {
+      // Convert to D3 tree structure
+      const treeData = folderToD3Tree(node, 1);
+
+      const root = d3
+        .hierarchy<D3TreeNode>(treeData)
+        .sum((d) => (d.type === 'file' ? d.size : 0) || (d.children ? 0 : d.size))
+        .sort((a, b) => (b.value || 0) - (a.value || 0));
+
+      // Create treemap layout
+      const treemap = d3
+        .treemap<D3TreeNode>()
+        .size([Math.sqrt(parentArea), Math.sqrt(parentArea)]) // Approximate square for calculation
+        .padding(2)
+        .round(true);
+
+      treemap(root);
+
+      // Check children for large tiles
+      type TreemapNodeLocal = d3.HierarchyRectangularNode<D3TreeNode>;
+      const children = root.descendants().filter(d => d.depth === 1) as TreemapNodeLocal[];
+
+      for (const child of children) {
+        if (child.data.type !== 'folder' || !child.data.hasChildren) continue;
+
+        const childArea = (child.x1 - child.x0) * (child.y1 - child.y0);
+        const ratio = childArea / parentArea;
+
+        // If folder takes more than 50% of parent area, auto-expand it
+        if (ratio > 0.5) {
+          currentExpandedPaths.add(child.data.path);
+
+          // Find the actual folder and recursively check its children
+          const actualFolder = findNode(folderTree, child.data.path);
+          if (actualFolder && actualFolder.type === 'folder') {
+            findLargeFolders(actualFolder as FolderNode, childArea, currentExpandedPaths);
+          }
+        }
+      }
+    };
+
+    findLargeFolders(currentNode, totalArea, autoExpandPaths);
+
+    if (autoExpandPaths.size > 0) {
+      setExpandedPaths(autoExpandPaths);
+    } else {
+      setExpandedPaths(new Set());
+    }
+  }, [treemapCurrentPath, currentNode, folderTree, dimensions]);
 
   if (!folderTree) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500">
-        No data loaded
+        {t.noDataLoaded}
       </div>
     );
   }
@@ -442,7 +508,7 @@ export function TreemapView() {
             className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded"
           >
             <Home className="w-4 h-4" />
-            Root
+            {t.root}
           </button>
           {breadcrumbs.map((crumb) => (
             <div key={crumb.path} className="flex items-center">
@@ -465,18 +531,20 @@ export function TreemapView() {
               className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded"
             >
               <RotateCcw className="w-4 h-4" />
-              Collapse All
+              {t.collapseAll}
             </button>
           )}
 
           <select
             value={treemapColorBy}
-            onChange={(e) => setTreemapColorBy(e.target.value as 'extension' | 'category' | 'depth')}
+            onChange={(e) => setTreemapColorBy(e.target.value as TreemapColorBy)}
             className="text-sm border border-gray-300 rounded px-2 py-1"
           >
-            <option value="extension">Color by Extension</option>
-            <option value="category">Color by Category</option>
-            <option value="depth">Color by Depth</option>
+            <option value="extension">{t.colorByExtension}</option>
+            <option value="category">{t.colorByCategory}</option>
+            <option value="depth">{t.colorByDepth}</option>
+            <option value="species">{language === 'es' ? 'Color por Especie' : 'Color by Species'}</option>
+            <option value="project">{language === 'es' ? 'Color por Proyecto' : 'Color by Project'}</option>
           </select>
         </div>
       </div>
@@ -497,8 +565,43 @@ export function TreemapView() {
             {hoveredNode.type === 'file' && hoveredNode.extension && (
               <div className="text-gray-400">{hoveredNode.extension}</div>
             )}
+            {/* Metadata info */}
+            {hoveredNode.metadata && (
+              <div className="mt-1 pt-1 border-t border-gray-700 space-y-0.5">
+                {hoveredNode.metadata.species && (
+                  <div className="text-green-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Especie:' : 'Species:'}</span> {hoveredNode.metadata.species}
+                  </div>
+                )}
+                {hoveredNode.metadata.project && (
+                  <div className="text-purple-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Proyecto:' : 'Project:'}</span> {hoveredNode.metadata.project}
+                  </div>
+                )}
+                {hoveredNode.metadata.location && (
+                  <div className="text-yellow-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Ubicación:' : 'Location:'}</span> {hoveredNode.metadata.location}
+                  </div>
+                )}
+                {hoveredNode.metadata.zone && (
+                  <div className="text-orange-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Zona:' : 'Zone:'}</span> {hoveredNode.metadata.zone}
+                  </div>
+                )}
+                {hoveredNode.metadata.extracted_date && (
+                  <div className="text-cyan-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Fecha:' : 'Date:'}</span> {hoveredNode.metadata.extracted_date}
+                  </div>
+                )}
+                {hoveredNode.metadata.equipment && (
+                  <div className="text-pink-300 text-xs">
+                    <span className="text-gray-400">{language === 'es' ? 'Equipo:' : 'Equipment:'}</span> {hoveredNode.metadata.equipment}
+                  </div>
+                )}
+              </div>
+            )}
             {hoveredNode.type === 'folder' && hoveredNode.hasChildren && (
-              <div className="text-blue-300 text-xs mt-1">Click to expand</div>
+              <div className="text-blue-300 text-xs mt-1">{t.clickToExpand}</div>
             )}
           </div>
         )}

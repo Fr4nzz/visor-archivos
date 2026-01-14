@@ -8,6 +8,7 @@ import { FolderTree } from './components/navigator/FolderTree';
 import { TreemapView } from './components/treemap/TreemapView';
 import { StatsDashboard } from './components/stats/StatsDashboard';
 import { SearchView } from './components/search/SearchView';
+import { DataTableView } from './components/data/DataTableView';
 import { useInventoryStore } from './stores/inventoryStore';
 import { useUIStore } from './stores/uiStore';
 import type { ColumnMapping } from './types/inventory';
@@ -125,15 +126,24 @@ function App() {
             return <StatsDashboard />;
           case 'search':
             return <SearchView />;
+          case 'data':
+            return <DataTableView />;
           default:
             return <FolderTree />;
         }
     }
   };
 
+  const handleAppReset = useCallback(() => {
+    setAppState('upload');
+    setCurrentFile(null);
+    setCsvHeaders([]);
+    setCsvPreview([]);
+  }, []);
+
   return (
     <div className="h-screen bg-gray-100 flex flex-col">
-      <Header />
+      <Header onReset={handleAppReset} />
       {appState === 'ready' && <TabNavigation />}
       <main className="flex-1 min-h-0 overflow-auto">{renderContent()}</main>
     </div>
