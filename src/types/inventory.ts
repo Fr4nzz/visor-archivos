@@ -52,6 +52,11 @@ export interface MetadataFields {
   sequence_number?: string;
   deforestation_period?: string;
   is_system_file?: string;
+  // Cross-reference enrichment
+  xref_source?: string;
+  xref_latitude?: string;
+  xref_longitude?: string;
+  xref_comment?: string;
 }
 
 export type ColumnMapping = RequiredFields & OptionalFields & MetadataFields;
@@ -104,6 +109,11 @@ export const COLUMN_ALIASES: Record<keyof ColumnMapping, string[]> = {
   sequence_number: ['sequence_number', 'secuencia', 'seq'],
   deforestation_period: ['deforestation_period', 'periodo_deforestacion'],
   is_system_file: ['is_system_file', 'archivo_sistema', 'system'],
+  // Cross-reference enrichment
+  xref_source: ['xref_source', 'crossref_source', 'fuente_cruzada'],
+  xref_latitude: ['xref_latitude', 'crossref_latitude', 'latitud'],
+  xref_longitude: ['xref_longitude', 'crossref_longitude', 'longitud'],
+  xref_comment: ['xref_comment', 'crossref_comment', 'comentario_cruzado'],
 };
 
 // Metadata stored on entries
@@ -143,6 +153,11 @@ export interface EntryMetadata {
   sequence_number?: string | null;
   deforestation_period?: string | null;
   is_system_file?: boolean;
+  // Cross-reference enrichment
+  xref_source?: string | null;
+  xref_latitude?: string | null;
+  xref_longitude?: string | null;
+  xref_comment?: string | null;
 }
 
 // Processed inventory entry

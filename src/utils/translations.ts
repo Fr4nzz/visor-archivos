@@ -88,6 +88,22 @@ export const translations = {
     colorByCategory: 'Color by Category',
     colorByDepth: 'Color by Depth',
     clickToExpand: 'Click to expand',
+
+    // Map
+    map: 'Map',
+    groupBy: 'Group by',
+    groupByProject: 'Project',
+    groupByDataType: 'Data Type',
+    filesCount: 'files',
+    speciesDetected: 'species detected',
+    layers: 'Layers',
+    boundary: 'Boundary',
+    trails: 'Trails',
+    bufferZone: 'Buffer Zone',
+    waypoints: 'Waypoints',
+    noGeoData: 'No files with GPS coordinates found',
+    dropGeoJSON: 'Drop GeoJSON files here to add map layers',
+    orDropGeoJSON: 'You can also drop .geojson files here',
   },
   es: {
     // Header
@@ -176,6 +192,22 @@ export const translations = {
     colorByCategory: 'Color por Categoría',
     colorByDepth: 'Color por Profundidad',
     clickToExpand: 'Clic para expandir',
+
+    // Map
+    map: 'Mapa',
+    groupBy: 'Agrupar por',
+    groupByProject: 'Proyecto',
+    groupByDataType: 'Tipo de Dato',
+    filesCount: 'archivos',
+    speciesDetected: 'especies detectadas',
+    layers: 'Capas',
+    boundary: 'Límite',
+    trails: 'Senderos',
+    bufferZone: 'Zona de Amortiguamiento',
+    waypoints: 'Waypoints',
+    noGeoData: 'No se encontraron archivos con coordenadas GPS',
+    dropGeoJSON: 'Arrastra archivos GeoJSON aquí para agregar capas',
+    orDropGeoJSON: 'También puedes arrastrar archivos .geojson aquí',
   },
 } as const;
 

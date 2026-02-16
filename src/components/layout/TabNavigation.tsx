@@ -1,4 +1,4 @@
-import { FolderTree, LayoutGrid, BarChart3, Search, Table } from 'lucide-react';
+import { FolderTree, LayoutGrid, BarChart3, Search, Table, MapPin } from 'lucide-react';
 import { useUIStore, type TabId } from '../../stores/uiStore';
 import { translations, type TranslationKey } from '../../utils/translations';
 import { clsx } from 'clsx';
@@ -15,6 +15,7 @@ const tabs: Tab[] = [
   { id: 'stats', labelKey: 'statistics', icon: BarChart3 },
   { id: 'search', labelKey: 'search', icon: Search },
   { id: 'data', labelKey: 'dataTable', icon: Table },
+  { id: 'map', labelKey: 'map', icon: MapPin },
 ];
 
 export function TabNavigation() {

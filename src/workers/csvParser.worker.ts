@@ -176,6 +176,12 @@ function mapRowToEntry(
   extractString('sequence_number');
   extractString('deforestation_period');
 
+  // Cross-reference enrichment
+  extractString('xref_source');
+  extractString('xref_latitude');
+  extractString('xref_longitude');
+  extractString('xref_comment');
+
   // Boolean field
   if (mapping.is_system_file && row[mapping.is_system_file]) {
     metadata.is_system_file = row[mapping.is_system_file]?.toLowerCase() === 'true';

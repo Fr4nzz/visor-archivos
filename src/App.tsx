@@ -9,6 +9,7 @@ import { TreemapView } from './components/treemap/TreemapView';
 import { StatsDashboard } from './components/stats/StatsDashboard';
 import { SearchView } from './components/search/SearchView';
 import { DataTableView } from './components/data/DataTableView';
+import { MapView } from './components/map/MapView';
 import { useInventoryStore } from './stores/inventoryStore';
 import { useUIStore } from './stores/uiStore';
 import type { ColumnMapping } from './types/inventory';
@@ -128,6 +129,8 @@ function App() {
             return <SearchView />;
           case 'data':
             return <DataTableView />;
+          case 'map':
+            return <MapView />;
           default:
             return <FolderTree />;
         }

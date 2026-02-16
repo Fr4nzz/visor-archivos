@@ -25,6 +25,7 @@ export default defineConfig({
         manualChunks: {
           d3: ['d3'],
           'react-vendor': ['react', 'react-dom'],
+          'maplibre-gl': ['maplibre-gl'],
         },
       },
     },

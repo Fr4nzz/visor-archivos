@@ -3,8 +3,9 @@ import { Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import Papa from 'papaparse';
 import { useInventoryStore } from '../../stores/inventoryStore';
-import { useUIStore } from '../../stores/uiStore';
+import { useUIStore, type GeoJSONLayer } from '../../stores/uiStore';
 import { translations } from '../../utils/translations';
+import { detectLayerType } from '../../utils/geojsonUtils';
 
 interface DropZoneProps {
   onFileLoaded: (file: File, headers: string[], preview: Record<string, string>[]) => void;
@@ -14,8 +15,44 @@ export function DropZone({ onFileLoaded }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isLoading } = useInventoryStore();
-  const { language } = useUIStore();
+  const { language, addGeoJSONLayers } = useUIStore();
   const t = translations[language];
+
+  const handleGeoJSONFiles = useCallback((files: File[]) => {
+    const layers: GeoJSONLayer[] = [];
+
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise<void>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              try {
+                const data = JSON.parse(e.target?.result as string);
+                if (data.type === 'FeatureCollection' && Array.isArray(data.features)) {
+                  const layerType = detectLayerType(file.name, data);
+                  layers.push({
+                    name: file.name.replace(/\.geojson$/i, ''),
+                    data,
+                    visible: true,
+                    layerType,
+                  });
+                }
+              } catch {
+                // Skip invalid JSON files silently
+              }
+              resolve();
+            };
+            reader.onerror = () => resolve();
+            reader.readAsText(file);
+          })
+      )
+    ).then(() => {
+      if (layers.length > 0) {
+        addGeoJSONLayers(layers);
+      }
+    });
+  }, [addGeoJSONLayers]);
 
   const handleFile = useCallback((file: File) => {
     setError(null);
@@ -55,11 +92,21 @@ export function DropZone({ onFileLoaded }: DropZoneProps) {
     e.stopPropagation();
     setIsDragging(false);
 
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFile(file);
+    const files = Array.from(e.dataTransfer.files);
+    const csvFile = files.find((f) => f.name.toLowerCase().endsWith('.csv'));
+    const geojsonFiles = files.filter((f) => f.name.toLowerCase().endsWith('.geojson'));
+
+    // Process GeoJSON files alongside CSV
+    if (geojsonFiles.length > 0) {
+      handleGeoJSONFiles(geojsonFiles);
     }
-  }, [handleFile]);
+
+    if (csvFile) {
+      handleFile(csvFile);
+    } else if (geojsonFiles.length === 0) {
+      setError(t.pleaseUploadCSV);
+    }
+  }, [handleFile, handleGeoJSONFiles, t.pleaseUploadCSV]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -135,12 +182,16 @@ export function DropZone({ onFileLoaded }: DropZoneProps) {
             {isDragging ? t.dropFile : t.dragDropTitle}
           </h2>
 
-          <p className="text-gray-500 text-center mb-4">
+          <p className="text-gray-500 text-center mb-2">
             {t.clickToBrowse}
           </p>
 
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-400 mb-1">
             {t.supportsFiles}
+          </p>
+
+          <p className="text-xs text-gray-400">
+            {t.orDropGeoJSON}
           </p>
         </label>
       </div>

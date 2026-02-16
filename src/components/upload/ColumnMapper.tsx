@@ -29,7 +29,9 @@ const metadataFields: FieldKey[] = [
   'equipment', 'location', 'zone', 'project', 'data_type',
   // Specialized
   'climate_variable', 'climate_extent', 'camera_id', 'sequence_number',
-  'deforestation_period', 'is_system_file'
+  'deforestation_period', 'is_system_file',
+  // Cross-reference enrichment
+  'xref_source', 'xref_latitude', 'xref_longitude', 'xref_comment'
 ];
 
 function autoDetectColumn(headers: string[], field: FieldKey): string | null {
@@ -104,6 +106,11 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
       sequence_number: null,
       deforestation_period: null,
       is_system_file: null,
+      // Cross-reference enrichment
+      xref_source: null,
+      xref_latitude: null,
+      xref_longitude: null,
+      xref_comment: null,
     };
 
     // Auto-detect columns first
@@ -197,6 +204,11 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
       sequence_number: mapping.sequence_number || undefined,
       deforestation_period: mapping.deforestation_period || undefined,
       is_system_file: mapping.is_system_file || undefined,
+      // Cross-reference enrichment
+      xref_source: mapping.xref_source || undefined,
+      xref_latitude: mapping.xref_latitude || undefined,
+      xref_longitude: mapping.xref_longitude || undefined,
+      xref_comment: mapping.xref_comment || undefined,
     };
 
     onConfirm(columnMapping);
@@ -247,6 +259,11 @@ export function ColumnMapper({ headers, preview, onConfirm, initialMapping }: Co
     sequence_number: language === 'es' ? 'Número de Secuencia' : 'Sequence Number',
     deforestation_period: language === 'es' ? 'Período Deforestación' : 'Deforestation Period',
     is_system_file: language === 'es' ? 'Archivo de Sistema' : 'System File',
+    // Cross-reference enrichment
+    xref_source: language === 'es' ? 'Fuente Cruzada' : 'Xref Source',
+    xref_latitude: language === 'es' ? 'Latitud' : 'Latitude',
+    xref_longitude: language === 'es' ? 'Longitud' : 'Longitude',
+    xref_comment: language === 'es' ? 'Comentario Cruzado' : 'Xref Comment',
   };
 
   const required = language === 'es' ? 'Requerido' : 'Required';

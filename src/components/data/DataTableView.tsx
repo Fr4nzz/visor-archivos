@@ -59,6 +59,11 @@ const COLUMNS: ColumnDef[] = [
   { key: 'date_format_hint', label: 'Date Format', labelEs: 'Formato Fecha', width: 120, metadata: true, filterType: 'dropdown' },
   // Other
   { key: 'camera_id', label: 'Camera', labelEs: 'Cámara', width: 100, metadata: true, filterType: 'dropdown' },
+  // Cross-reference enrichment
+  { key: 'xref_source', label: 'Xref Source', labelEs: 'Fuente Cruzada', width: 180, metadata: true, filterType: 'dropdown' },
+  { key: 'xref_latitude', label: 'Latitude', labelEs: 'Latitud', width: 110, metadata: true },
+  { key: 'xref_longitude', label: 'Longitude', labelEs: 'Longitud', width: 110, metadata: true },
+  { key: 'xref_comment', label: 'Xref Comment', labelEs: 'Comentario Cruzado', width: 200, metadata: true },
 ];
 
 export function DataTableView() {
@@ -175,6 +180,11 @@ export function DataTableView() {
       case 'date_format_hint': return entry.metadata?.date_format_hint || null;
       // Other
       case 'camera_id': return entry.metadata?.camera_id || null;
+      // Cross-reference enrichment
+      case 'xref_source': return entry.metadata?.xref_source || null;
+      case 'xref_latitude': return entry.metadata?.xref_latitude || null;
+      case 'xref_longitude': return entry.metadata?.xref_longitude || null;
+      case 'xref_comment': return entry.metadata?.xref_comment || null;
       default: return null;
     }
   }, []);
@@ -214,6 +224,7 @@ export function DataTableView() {
             case 'equipment': return entry.metadata?.equipment;
             case 'data_type': return entry.metadata?.data_type;
             case 'camera_id': return entry.metadata?.camera_id;
+            case 'xref_source': return entry.metadata?.xref_source;
             default: return null;
           }
         })();
